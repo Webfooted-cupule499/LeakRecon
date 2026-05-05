@@ -1,0 +1,7 @@
+requests[socks]==2.32.3
+PySocks==1.7.1
+beautifulsoup4==4.13.4
+lxml==5.4.0
+rich==14.0.0
+fake-useragent==2.2.0
+stem==1.8.2
