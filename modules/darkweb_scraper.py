@@ -129,18 +129,28 @@ PASTE_SITES = [
 
 class DarkWebScraper:
     """
-    High-performance, asynchronous Dark Web and Clearnet scraper.
-    Uses aiohttp via TorHandler for concurrent OSINT data gathering.
+    Enterprise-grade asynchronous Dark Web and Clearnet scraper.
+
+    Utilizes aiohttp via TorHandler for concurrent OSINT data gathering
+    with built-in false positive filtering and result consolidation.
     """
 
-    def __init__(self, tor_handler):
+    def __init__(self, tor_handler: Any) -> None:
+        """
+        Initializes the DarkWebScraper module.
+
+        Args:
+            tor_handler: The TorHandler instance for proxied network operations.
+        """
         self.tor = tor_handler
         self._semaphore = asyncio.Semaphore(settings.MAX_CONCURRENCY)
 
     def _sanitize_query(self, query: str) -> str:
+        """URL-encodes a search query for safe transmission."""
         return urllib.parse.quote_plus(query.strip())
 
     def _is_false_positive(self, page_text: str) -> bool:
+        """Determines if the page content indicates zero results."""
         text_lower = page_text.lower()
         for pattern in NO_RESULT_PATTERNS:
             if re.search(pattern, text_lower):
@@ -148,6 +158,7 @@ class DarkWebScraper:
         return False
 
     def _strip_search_echo(self, soup: BeautifulSoup, target: str) -> str:
+        """Removes search form echoes and navigation elements from parsed HTML."""
         for selector in EXCLUDED_ZONES:
             for tag in soup.select(selector):
                 tag.decompose()
@@ -326,6 +337,7 @@ class DarkWebScraper:
 
 
 def _consolidate_results(results: List[ScanResult]) -> List[ScanResult]:
+    """Merges duplicate source results into a single consolidated list."""
     source_map: Dict[str, ScanResult] = {}
     for r in results:
         name = r.source_name
@@ -350,7 +362,8 @@ def _consolidate_results(results: List[ScanResult]) -> List[ScanResult]:
     return list(source_map.values())
 
 
-def display_results(target: str, label: str, results: List[ScanResult], elapsed: float):
+def display_results(target: str, label: str, results: List[ScanResult], elapsed: float) -> None:
+    """Renders scan results as a formatted terminal table with summary statistics."""
     console.print("\n")
     consolidated = _consolidate_results(results)
 

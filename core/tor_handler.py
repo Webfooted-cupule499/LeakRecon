@@ -5,30 +5,26 @@ from urllib.parse import urlparse
 
 import aiohttp
 from aiohttp_socks import ProxyConnector
-from rich.console import Console
 
 from config import settings
 
-console = Console()
 logger = logging.getLogger(__name__)
 
 
 class TorHandler:
     """
-    Asynchronous network handler for routing traffic through the Tor network.
-    Utilizes aiohttp and aiohttp_socks for non-blocking, high-concurrency SOCKS5 proxying.
-    Includes circuit breaking mechanisms to avoid dead or slow onion nodes.
+    Enterprise-grade asynchronous network handler for Tor routing.
+    
+    Provides high-concurrency SOCKS5 proxying via aiohttp with built-in
+    resilience, aggressive circuit breaking, and exponential backoff mechanisms.
     """
 
     def __init__(self) -> None:
-        """Initializes the TorHandler with configuration state and circuit breaker dict."""
+        """Initializes the TorHandler with configuration state and circuit breaker metrics."""
         self.session: Optional[aiohttp.ClientSession] = None
         self.tor_ip: Optional[str] = None
         self._failed_hosts: Dict[str, int] = {}
         self._lock: asyncio.Lock = asyncio.Lock()
-
-        # Tor connectivity verification endpoint
-        self._tor_check_url: str = "https://check.torproject.org/api/ip"
 
     async def _create_session(self) -> aiohttp.ClientSession:
         """
@@ -61,7 +57,7 @@ class TorHandler:
 
     def _get_timeout(self, url: str, explicit_timeout: Optional[int] = None) -> int:
         """
-        Determines the appropriate timeout based on whether the URL is an onion service or clearnet.
+        Determines the appropriate timeout based on the target zone (clearnet vs onion).
         
         Args:
             url (str): The target URL.
@@ -78,7 +74,7 @@ class TorHandler:
 
     async def is_host_dead(self, url: str) -> bool:
         """
-        Checks if the host is flagged as dead by the circuit breaker logic.
+        Evaluates the health status of a host based on the circuit breaker thresholds.
         
         Args:
             url (str): The target URL.
@@ -92,7 +88,7 @@ class TorHandler:
 
     async def _record_failure(self, url: str) -> None:
         """
-        Records a network failure for a specific host, incrementing its failure count.
+        Registers a network failure for a specific host, incrementing its fault counter.
         
         Args:
             url (str): The target URL.
@@ -103,7 +99,7 @@ class TorHandler:
 
     async def _record_success(self, url: str) -> None:
         """
-        Records a successful network operation, resetting the failure count for the host.
+        Registers a successful network operation, resetting the fault counter for the host.
         
         Args:
             url (str): The target URL.
@@ -113,13 +109,13 @@ class TorHandler:
             self._failed_hosts.pop(host, None)
 
     async def reset_circuit_breaker(self) -> None:
-        """Resets the circuit breaker by clearing the failed hosts registry."""
+        """Clears the circuit breaker registry, resetting all host fault states."""
         async with self._lock:
             self._failed_hosts.clear()
 
     async def get_dead_hosts(self) -> List[str]:
         """
-        Retrieves the list of hosts that have exceeded the failure threshold.
+        Retrieves the list of hosts currently blacklisted by the circuit breaker.
         
         Returns:
             List[str]: A list of dead hostnames.
@@ -129,47 +125,43 @@ class TorHandler:
 
     async def verify_tor_connection(self) -> bool:
         """
-        Verifies the proxy connection and checks if the network exit node is part of the Tor network.
+        Verifies the proxy connection and validates the Tor network exit node.
         
         Returns:
             bool: True if Tor connection is verified and operational, False otherwise.
         """
-        console.print("\n[bold cyan][ TOR ] Bağlantı doğrulanıyor (Asenkron)...[/bold cyan]")
-        console.print(f"  [dim]→ Deneniyor: {settings.tor_proxy_url}[/dim]")
-
+        logging.info("Verifying Tor connection asynchronously...")
         test_session = await self._create_session()
         timeout = aiohttp.ClientTimeout(total=20)
 
         try:
-            async with test_session.get(self._tor_check_url, timeout=timeout) as response:
+            async with test_session.get(settings.TOR_CHECK_URL, timeout=timeout) as response:
                 response.raise_for_status()
                 data = await response.json()
 
                 if data.get("IsTor", False):
-                    self.tor_ip = data.get("IP", "Bilinmiyor")
-                    self.session = test_session  # Keep session active
-                    console.print(f"  [bold green]✓ Tor bağlantısı aktif | Çıkış IP: {self.tor_ip}[/bold green]")
+                    self.tor_ip = data.get("IP", "Unknown")
+                    self.session = test_session
+                    logging.info(f"Tor connection verified. Exit IP: {self.tor_ip}")
                     return True
                 else:
-                    console.print("  [yellow]✗ Proxy yanıt verdi ama Tor ağında değil.[/yellow]")
+                    logging.warning("Proxy responded, but it is not routing through the Tor network.")
 
         except asyncio.TimeoutError:
-            console.print(f"  [red]✗ Zaman aşımı: {settings.tor_proxy_url}[/red]")
+            logging.error(f"Timeout occurred while verifying proxy at {settings.tor_proxy_url}.")
         except aiohttp.ClientError as e:
-            console.print(f"  [red]✗ Bağlantı reddedildi veya hata oluştu: {e}[/red]")
+            logging.error(f"Connection refused or error occurred: {e}")
         except Exception as e:
-            console.print(f"  [red]✗ Beklenmeyen sistem hatası: {e}[/red]")
+            logging.error(f"Unexpected system error during proxy verification: {e}")
 
-        # Close session on failure
         await test_session.close()
-        console.print("\n[bold red][ HATA ] Tor servisi asenkron bağlantısı kurulamadı.[/bold red]")
-        console.print("[dim]Docker üzerinde 'torproxy' servisinin ayakta olduğundan veya yerel makinede çalıştığından emin olun.[/dim]\n")
+        logging.critical("Failed to establish asynchronous Tor connection.")
         return False
 
     async def _execute_request(self, method: str, url: str, explicit_timeout: Optional[int] = None, **kwargs) -> Optional[aiohttp.ClientResponse]:
         """
         Core engine to execute HTTP methods asynchronously through the established Tor session.
-        Implements automatic retries and exponential backoff.
+        Implements automatic retries, exponential backoff, and circuit breaking.
         
         Args:
             method (str): HTTP method (e.g., 'GET', 'POST').
@@ -181,12 +173,12 @@ class TorHandler:
             Optional[aiohttp.ClientResponse]: The HTTP response object or None if failed.
         """
         if not self.session:
-            console.print("[bold red][ HATA ] Asenkron Tor oturumu başlatılmadı. Lütfen verify_tor_connection çağrın.[/bold red]")
+            logging.error("Asynchronous Tor session not initialized. Call verify_tor_connection first.")
             return None
 
         if await self.is_host_dead(url):
             host = self._get_host(url)
-            console.print(f"  [dim yellow]⊘ Atlanıyor (Circuit Breaker devrede): {host}[/dim yellow]")
+            logging.debug(f"Request skipped (Circuit Breaker active) for host: {host}")
             return None
 
         effective_timeout = self._get_timeout(url, explicit_timeout)
@@ -197,49 +189,59 @@ class TorHandler:
                 request_method = getattr(self.session, method.lower())
                 async with request_method(url, timeout=client_timeout, **kwargs) as response:
                     response.raise_for_status()
-                    # To allow reading the payload outside this scope, we read it to buffer.
-                    # Or depending on design, we return the content directly if needed.
-                    # Given typical requests structure emulation, we will return a response object,
-                    # however reading it completely is required in async context manager.
                     await response.read()
-                    
                     await self._record_success(url)
                     return response
 
             except asyncio.TimeoutError:
-                host = self._get_host(url)
-                console.print(f"  [yellow]⏱ Zaman aşımı ({attempt}/{settings.MAX_RETRIES}): {host}[/yellow]")
+                logging.warning(f"Timeout ({attempt}/{settings.MAX_RETRIES}) for host: {self._get_host(url)}")
             except aiohttp.ClientResponseError as e:
-                console.print(f"  [yellow]⚠ HTTP Hatası ({e.status}): {url[:80]}...[/yellow]")
-                # We do not retry 4xx errors usually, except 429
+                logging.warning(f"HTTP Error ({e.status}) for URL: {url}")
                 if e.status not in [429, 500, 502, 503, 504]:
                     await self._record_failure(url)
                     return None
             except aiohttp.ClientError as e:
-                host = self._get_host(url)
-                console.print(f"  [yellow]⚡ Bağlantı hatası ({attempt}/{settings.MAX_RETRIES}): {host} | Hata: {e}[/yellow]")
+                logging.warning(f"Connection Error ({attempt}/{settings.MAX_RETRIES}) for host: {self._get_host(url)}. Details: {e}")
             except Exception as e:
-                console.print(f"  [red]✗ Beklenmeyen hata: {e}[/red]")
+                logging.error(f"Unexpected error during request execution: {e}")
                 break
                 
-            # If we reached here, it means we failed and need to retry (if attempts left)
             if attempt < settings.MAX_RETRIES:
                 await asyncio.sleep(settings.RETRY_BACKOFF * attempt)
 
-        # After max retries
         await self._record_failure(url)
         return None
 
     async def get(self, url: str, timeout: Optional[int] = None, **kwargs) -> Optional[aiohttp.ClientResponse]:
-        """Performs an asynchronous GET request."""
+        """
+        Executes an asynchronous HTTP GET request.
+        
+        Args:
+            url (str): The target URL.
+            timeout (Optional[int]): Custom timeout override.
+            kwargs: Additional aiohttp request parameters.
+            
+        Returns:
+            Optional[aiohttp.ClientResponse]: The response object if successful, None otherwise.
+        """
         return await self._execute_request('GET', url, timeout, **kwargs)
 
     async def post(self, url: str, timeout: Optional[int] = None, **kwargs) -> Optional[aiohttp.ClientResponse]:
-        """Performs an asynchronous POST request."""
+        """
+        Executes an asynchronous HTTP POST request.
+        
+        Args:
+            url (str): The target URL.
+            timeout (Optional[int]): Custom timeout override.
+            kwargs: Additional aiohttp request parameters.
+            
+        Returns:
+            Optional[aiohttp.ClientResponse]: The response object if successful, None otherwise.
+        """
         return await self._execute_request('POST', url, timeout, **kwargs)
 
     async def close(self) -> None:
-        """Closes the underlying asynchronous HTTP session gracefully."""
+        """Terminates the asynchronous HTTP session gracefully and resets state."""
         if self.session:
             await self.session.close()
             self.session = None

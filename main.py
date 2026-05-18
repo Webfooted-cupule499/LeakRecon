@@ -5,13 +5,14 @@ import time
 import asyncio
 import platform
 import socket
+import collections
 from datetime import datetime
+from typing import Optional, Dict, Any
 
 # Force UTF-8 encoding on Windows to prevent charmap errors with ASCII art
 if os.name == "nt":
     os.system("chcp 65001 > nul 2>&1")
     sys.stdout.reconfigure(encoding="utf-8")
-    # Fix connection reset errors and _ProactorBasePipeTransport warnings
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 from rich.console import Console
@@ -36,11 +37,13 @@ from modules.crypto_tracker import CryptoTracker
 
 console = Console()
 
-scan_history: list[dict] = []
-tor_instance: TorHandler = None
+# Memory-safe bounded buffer to prevent RAM leaks during long-running sessions
+scan_history: collections.deque = collections.deque(maxlen=10000)
+tor_instance: Optional[TorHandler] = None
 
 
-def log_scan(category: str, target: str):
+def log_scan(category: str, target: str) -> None:
+    """Appends a scan event to the bounded history buffer."""
     scan_history.append({
         "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "category": category,
@@ -48,7 +51,8 @@ def log_scan(category: str, target: str):
     })
 
 
-def process_choice(choice: str, menu_key: str) -> str | None:
+def process_choice(choice: str, menu_key: str) -> Optional[str]:
+    """Evaluates user input against global commands and returns a navigation directive."""
     glob = is_global_command(choice)
     if glob == "back" or glob == "home":
         return "back"
@@ -62,7 +66,8 @@ def process_choice(choice: str, menu_key: str) -> str | None:
     return None
 
 
-async def menu_darkweb(scraper: DarkWebScraper):
+async def menu_darkweb(scraper: DarkWebScraper) -> None:
+    """Handles the Dark Web search menu interaction loop."""
     while True:
         show_screen("darkweb")
         choice = get_input("darkweb")
@@ -110,7 +115,8 @@ async def menu_darkweb(scraper: DarkWebScraper):
             time.sleep(1.5)
 
 
-async def menu_identity(identity: IdentityRecon):
+async def menu_identity(identity: IdentityRecon) -> None:
+    """Handles the Identity Reconnaissance menu interaction loop."""
     while True:
         show_screen("identity")
         choice = get_input("identity")
@@ -144,7 +150,8 @@ async def menu_identity(identity: IdentityRecon):
             time.sleep(1.5)
 
 
-async def menu_network(network: NetworkIntel):
+async def menu_network(network: NetworkIntel) -> None:
+    """Handles the Network Intelligence menu interaction loop."""
     while True:
         show_screen("network")
         choice = get_input("network")
@@ -310,7 +317,8 @@ async def menu_network(network: NetworkIntel):
             time.sleep(1.5)
 
 
-async def menu_onion(onion: OnionScanner):
+async def menu_onion(onion: OnionScanner) -> None:
+    """Handles the Onion Scanner menu interaction loop."""
     while True:
         show_screen("onion")
         choice = get_input("onion")
@@ -358,7 +366,8 @@ async def menu_onion(onion: OnionScanner):
             time.sleep(1.5)
 
 
-async def menu_credential(cred: CredentialHunt):
+async def menu_credential(cred: CredentialHunt) -> None:
+    """Handles the Credential Hunt menu interaction loop."""
     while True:
         show_screen("credential")
         choice = get_input("credential")
@@ -415,7 +424,8 @@ async def menu_credential(cred: CredentialHunt):
             time.sleep(1.5)
 
 
-async def menu_crypto(crypto: CryptoTracker):
+async def menu_crypto(crypto: CryptoTracker) -> None:
+    """Handles the Cryptocurrency Tracking menu interaction loop."""
     while True:
         show_screen("crypto")
         choice = get_input("crypto")
@@ -447,7 +457,8 @@ async def menu_crypto(crypto: CryptoTracker):
             time.sleep(1.5)
 
 
-async def menu_tools(tor: TorHandler):
+async def menu_tools(tor: TorHandler) -> None:
+    """Handles the Tools and Settings menu interaction loop."""
     from core import database as scan_db
     from core import reporter
 
@@ -688,7 +699,8 @@ async def menu_tools(tor: TorHandler):
             time.sleep(1.5)
 
 
-async def main():
+async def main() -> None:
+    """Application entry point. Initializes Tor connection and module instances."""
     clear_screen()
     print_banner()
     console.print()

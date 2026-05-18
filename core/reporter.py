@@ -2,16 +2,28 @@ import os
 import csv
 import json
 from datetime import datetime
+from typing import List, Dict, Any, Optional
+
 from core import database as db
 
 REPORT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "reports")
 
 
-def _ensure_dir():
+def _ensure_dir() -> None:
+    """Ensures the reports output directory exists."""
     os.makedirs(REPORT_DIR, exist_ok=True)
 
 
-def export_json(scan_ids: list[int] | None = None) -> str:
+def export_json(scan_ids: Optional[List[int]] = None) -> str:
+    """
+    Exports scan data to a JSON file.
+    
+    Args:
+        scan_ids (Optional[List[int]]): Specific scan IDs to export. Exports all if None.
+        
+    Returns:
+        str: The absolute path to the generated JSON file.
+    """
     _ensure_dir()
     fname = f"leakrecon_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     path = os.path.join(REPORT_DIR, fname)
@@ -33,7 +45,16 @@ def export_json(scan_ids: list[int] | None = None) -> str:
     return path
 
 
-def export_csv(scan_ids: list[int] | None = None) -> str:
+def export_csv(scan_ids: Optional[List[int]] = None) -> str:
+    """
+    Exports scan data to a CSV file.
+    
+    Args:
+        scan_ids (Optional[List[int]]): Specific scan IDs to export. Exports all if None.
+        
+    Returns:
+        str: The absolute path to the generated CSV file.
+    """
     _ensure_dir()
     fname = f"leakrecon_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
     path = os.path.join(REPORT_DIR, fname)
@@ -52,14 +73,14 @@ def export_csv(scan_ids: list[int] | None = None) -> str:
     with open(path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow([
-            "Tarama ID", "Hedef", "Kategori", "Tarih", "Süre (sn)",
-            "Kaynak", "Durum", "Eşleşmeler", "Hata",
+            "Scan ID", "Target", "Category", "Timestamp", "Duration (s)",
+            "Source", "Status", "Matches", "Error",
         ])
 
         for scan_data in scans:
             scan = scan_data["scan"]
             for r in scan_data["results"]:
-                status = "BULUNDU" if r["found"] else ("HATA" if r["error"] else "TEMİZ")
+                status = "FOUND" if r["found"] else ("ERROR" if r["error"] else "CLEAN")
                 snippets = ""
                 if r["snippets"]:
                     try:
@@ -75,7 +96,17 @@ def export_csv(scan_ids: list[int] | None = None) -> str:
     return path
 
 
-def export_html(scan_ids: list[int] | None = None) -> str:
+def export_html(scan_ids: Optional[List[int]] = None) -> str:
+    """
+    Generates an enterprise-grade HTML intelligence report with executive summary,
+    findings breakdown, and technical details sections.
+    
+    Args:
+        scan_ids (Optional[List[int]]): Specific scan IDs to include. Includes all if None.
+        
+    Returns:
+        str: The absolute path to the generated HTML report.
+    """
     _ensure_dir()
     fname = f"leakrecon_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
     path = os.path.join(REPORT_DIR, fname)
@@ -94,6 +125,13 @@ def export_html(scan_ids: list[int] | None = None) -> str:
     stats = db.get_stats()
     generated = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    total_findings = sum(s["scan"]["found_count"] for s in scans)
+    total_errors = sum(s["scan"]["error_count"] for s in scans)
+    total_clean = sum(s["scan"]["clean_count"] for s in scans)
+    risk_level = "CRITICAL" if total_findings > 10 else ("HIGH" if total_findings > 5 else ("MEDIUM" if total_findings > 0 else "LOW"))
+    risk_color = "#ff3838" if risk_level in ("CRITICAL", "HIGH") else ("#ffb700" if risk_level == "MEDIUM" else "#00ff88")
+
+    # Build scan detail blocks
     scan_blocks = []
     for scan_data in scans:
         scan = scan_data["scan"]
@@ -101,16 +139,16 @@ def export_html(scan_ids: list[int] | None = None) -> str:
         for idx, r in enumerate(scan_data["results"], 1):
             if r["found"]:
                 status_class = "status-found"
-                status_text = "● BULUNDU"
+                status_text = "FOUND"
             elif r["error"] and "Atlandı" in (r["error"] or ""):
                 status_class = "status-skipped"
-                status_text = "● ERİŞİLEMEDİ"
+                status_text = "UNREACHABLE"
             elif r["error"]:
                 status_class = "status-error"
-                status_text = "● HATA"
+                status_text = "ERROR"
             else:
                 status_class = "status-clean"
-                status_text = "● TEMİZ"
+                status_text = "CLEAN"
 
             detail = ""
             if r["found"] and r["snippets"]:
@@ -122,7 +160,7 @@ def export_html(scan_ids: list[int] | None = None) -> str:
             elif r["error"]:
                 detail = _escape(r["error"])
             else:
-                detail = "Eşleşme bulunamadı"
+                detail = "No match detected"
 
             rows.append(f"""
                 <tr>
@@ -135,28 +173,28 @@ def export_html(scan_ids: list[int] | None = None) -> str:
         scan_blocks.append(f"""
         <div class="scan-block">
             <div class="scan-header">
-                <h2>🔍 {_escape(scan['category'])}</h2>
+                <h3>{_escape(scan['category'])}</h3>
                 <span class="scan-time">{_escape(scan['timestamp'])}</span>
             </div>
             <div class="scan-meta">
-                <div class="meta-item"><span class="label">Hedef</span><span class="value">{_escape(scan['target'])}</span></div>
-                <div class="meta-item"><span class="label">Süre</span><span class="value">{scan['duration']:.1f}s</span></div>
-                <div class="meta-item"><span class="label">Kaynak</span><span class="value">{scan['source_count']}</span></div>
-                <div class="meta-item"><span class="label">Sorgu</span><span class="value">{scan['query_count']}</span></div>
+                <div class="meta-item"><span class="label">Target</span><span class="value">{_escape(scan['target'])}</span></div>
+                <div class="meta-item"><span class="label">Duration</span><span class="value">{scan['duration']:.1f}s</span></div>
+                <div class="meta-item"><span class="label">Sources</span><span class="value">{scan['source_count']}</span></div>
+                <div class="meta-item"><span class="label">Queries</span><span class="value">{scan['query_count']}</span></div>
             </div>
             <div class="scan-stats">
-                <span class="stat stat-found">Tespit: {scan['found_count']}</span>
-                <span class="stat stat-clean">Temiz: {scan['clean_count']}</span>
-                <span class="stat stat-error">Hata: {scan['error_count']}</span>
-                <span class="stat stat-skipped">Atlandı: {scan['skipped_count']}</span>
+                <span class="stat stat-found">Findings: {scan['found_count']}</span>
+                <span class="stat stat-clean">Clean: {scan['clean_count']}</span>
+                <span class="stat stat-error">Errors: {scan['error_count']}</span>
+                <span class="stat stat-skipped">Skipped: {scan['skipped_count']}</span>
             </div>
             <table>
                 <thead>
                     <tr>
                         <th class="center" style="width:40px">#</th>
-                        <th style="width:160px">Kaynak</th>
-                        <th class="center" style="width:120px">Durum</th>
-                        <th>Detay</th>
+                        <th style="width:160px">Source</th>
+                        <th class="center" style="width:120px">Status</th>
+                        <th>Details</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -165,12 +203,15 @@ def export_html(scan_ids: list[int] | None = None) -> str:
             </table>
         </div>""")
 
+    # Unique targets list for executive summary
+    unique_targets = list(set(s["scan"]["target"] for s in scans))
+
     html = f"""<!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LeakRecon — İstihbarat Raporu</title>
+    <title>LeakRecon — Intelligence Report</title>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         body {{
@@ -205,6 +246,64 @@ def export_html(scan_ids: list[int] | None = None) -> str:
             color: #3a4a5a;
             font-size: 0.85em;
             margin-top: 16px;
+        }}
+        .header .classification {{
+            display: inline-block;
+            margin-top: 12px;
+            padding: 4px 16px;
+            border: 1px solid #ff3838;
+            color: #ff3838;
+            font-size: 0.75em;
+            letter-spacing: 2px;
+            border-radius: 4px;
+        }}
+
+        /* Section Headers */
+        .section-title {{
+            font-size: 1.3em;
+            color: #00d4ff;
+            margin: 40px 0 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #1e2d3d;
+            letter-spacing: 1px;
+        }}
+
+        /* Executive Summary */
+        .executive-summary {{
+            background: linear-gradient(135deg, #111827, #1a2332);
+            border: 1px solid #1e2d3d;
+            border-radius: 12px;
+            padding: 28px;
+            margin-bottom: 32px;
+        }}
+        .executive-summary p {{
+            margin-bottom: 12px;
+            color: #a0b0c0;
+            font-size: 0.95em;
+        }}
+        .risk-badge {{
+            display: inline-block;
+            padding: 6px 20px;
+            border-radius: 6px;
+            font-weight: 700;
+            font-size: 0.9em;
+            letter-spacing: 1px;
+            color: #fff;
+        }}
+        .target-list {{
+            list-style: none;
+            padding: 0;
+            margin-top: 12px;
+        }}
+        .target-list li {{
+            padding: 4px 0;
+            color: #c8d6e5;
+            font-family: monospace;
+            font-size: 0.9em;
+        }}
+        .target-list li::before {{
+            content: "\\25B8  ";
+            color: #00d4ff;
         }}
 
         /* Stats Overview */
@@ -248,7 +347,7 @@ def export_html(scan_ids: list[int] | None = None) -> str:
             background: linear-gradient(135deg, #0f1923, #162030);
             border-bottom: 1px solid #1e2d3d;
         }}
-        .scan-header h2 {{ font-size: 1.1em; color: #e2e8f0; }}
+        .scan-header h3 {{ font-size: 1.1em; color: #e2e8f0; }}
         .scan-time {{ color: #5a6c7d; font-size: 0.85em; }}
         .scan-meta {{
             display: flex;
@@ -315,7 +414,7 @@ def export_html(scan_ids: list[int] | None = None) -> str:
             body {{ background: #fff; color: #333; }}
             .scan-block {{ border-color: #ddd; background: #fff; color: #333; }}
             .scan-header {{ background: #f0f0f0; border-color: #ddd; }}
-            .scan-header h2 {{ color: #333; }}
+            .scan-header h3 {{ color: #333; }}
             table {{ border: 1px solid #ddd; }}
             th {{ background: #f0f0f0; color: #333; border-bottom: 2px solid #ddd; }}
             td {{ border-top: 1px solid #ddd; color: #333; }}
@@ -325,6 +424,9 @@ def export_html(scan_ids: list[int] | None = None) -> str:
             .overview-card {{ background: #fff; border-color: #ddd; }}
             .overview-card .number {{ color: #333; }}
             .overview-card .label {{ color: #666; }}
+            .executive-summary {{ background: #f8f8f8; border-color: #ddd; }}
+            .executive-summary p {{ color: #333; }}
+            .section-title {{ color: #333; }}
         }}
     </style>
 </head>
@@ -332,34 +434,62 @@ def export_html(scan_ids: list[int] | None = None) -> str:
     <div class="container">
         <div class="header">
             <h1>LEAKRECON</h1>
-            <div class="subtitle">Dark Web Leak Intelligence — İstihbarat Raporu</div>
-            <div class="generated">Oluşturulma: {generated}</div>
+            <div class="subtitle">Dark Web Leak Intelligence Report</div>
+            <div class="classification">CONFIDENTIAL</div>
+            <div class="generated">Generated: {generated}</div>
         </div>
 
+        <!-- SECTION 1: EXECUTIVE SUMMARY -->
+        <h2 class="section-title">1. Executive Summary</h2>
+        <div class="executive-summary">
+            <p>
+                This report contains the results of an automated OSINT reconnaissance operation
+                conducted via the LeakRecon framework. All network traffic was routed exclusively
+                through the Tor anonymity network.
+            </p>
+            <p>
+                <strong>Assessment Period:</strong> {generated}<br>
+                <strong>Total Scans Executed:</strong> {len(scans)}<br>
+                <strong>Unique Targets:</strong> {len(unique_targets)}<br>
+                <strong>Total Findings:</strong> {total_findings}<br>
+                <strong>Overall Risk Level:</strong>
+                <span class="risk-badge" style="background: {risk_color};">{risk_level}</span>
+            </p>
+            <p><strong>Targets Assessed:</strong></p>
+            <ul class="target-list">
+                {''.join(f'<li>{_escape(t)}</li>' for t in unique_targets[:20])}
+            </ul>
+        </div>
+
+        <!-- SECTION 2: FINDINGS OVERVIEW -->
+        <h2 class="section-title">2. Findings Overview</h2>
         <div class="overview">
             <div class="overview-card">
                 <div class="number">{stats['total_scans']}</div>
-                <div class="label">Toplam Tarama</div>
+                <div class="label">Total Scans (All Time)</div>
             </div>
             <div class="overview-card">
-                <div class="number">{stats['total_findings']}</div>
-                <div class="label">Toplam Tespit</div>
+                <div class="number">{total_findings}</div>
+                <div class="label">Findings (This Report)</div>
             </div>
             <div class="overview-card">
-                <div class="number">{stats['unique_targets']}</div>
-                <div class="label">Benzersiz Hedef</div>
+                <div class="number">{total_clean}</div>
+                <div class="label">Clean Results</div>
             </div>
             <div class="overview-card">
-                <div class="number">{len(scans)}</div>
-                <div class="label">Bu Rapordaki Tarama</div>
+                <div class="number">{total_errors}</div>
+                <div class="label">Errors / Unreachable</div>
             </div>
         </div>
 
+        <!-- SECTION 3: TECHNICAL DETAILS -->
+        <h2 class="section-title">3. Technical Details</h2>
         {''.join(scan_blocks)}
 
         <div class="footer">
-            LeakRecon · Dark Web Leak Intelligence Framework<br>
-            Bu rapor otomatik olarak oluşturulmuştur · Gizlilik: TÜM trafik Tor ağı üzerinden · {generated}
+            LeakRecon &middot; Dark Web Leak Intelligence Framework<br>
+            This report was generated automatically. All traffic routed via Tor network. &middot; {generated}<br>
+            Classification: CONFIDENTIAL &mdash; Handle according to organizational data handling policies.
         </div>
     </div>
 </body>
@@ -371,12 +501,29 @@ def export_html(scan_ids: list[int] | None = None) -> str:
     return path
 
 
-def export_pdf(scan_ids: list[int] | None = None) -> str:
+def export_pdf(scan_ids: Optional[List[int]] = None) -> str:
+    """
+    Generates an enterprise PDF report by converting the HTML report via wkhtmltopdf.
+    
+    Args:
+        scan_ids (Optional[List[int]]): Specific scan IDs to include. Includes all if None.
+        
+    Returns:
+        str: The absolute path to the generated PDF file.
+        
+    Raises:
+        ImportError: If the pdfkit library is not installed.
+        OSError: If the wkhtmltopdf binary is not found on the system.
+    """
     _ensure_dir()
     try:
         import pdfkit
     except ImportError:
-        raise ImportError("PDF raporu oluşturmak için 'pdfkit' kütüphanesi eksik. Lütfen 'pip install pdfkit' komutunu çalıştırın. Ayrıca sisteminizde 'wkhtmltopdf' kurulu olmalıdır.")
+        raise ImportError(
+            "PDF generation requires the 'pdfkit' library. "
+            "Install via 'pip install pdfkit'. "
+            "Additionally, 'wkhtmltopdf' must be installed on the system."
+        )
 
     html_path = export_html(scan_ids)
     fname = f"leakrecon_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
@@ -391,20 +538,32 @@ def export_pdf(scan_ids: list[int] | None = None) -> str:
         'encoding': "UTF-8",
         'enable-local-file-access': None,
         'no-outline': None,
-        'print-media-type': None  # HTML'deki @media print CSS'ini kullanmak icin
+        'print-media-type': None,
     }
 
     try:
         pdfkit.from_file(html_path, path, options=options)
     except OSError as e:
         if "No wkhtmltopdf executable found" in str(e):
-            raise OSError("Sisteminizde 'wkhtmltopdf' kurulu değil. Lütfen yükleyin: https://wkhtmltopdf.org/downloads.html veya Ubuntu/Debian için 'apt install wkhtmltopdf' kullanın.")
+            raise OSError(
+                "wkhtmltopdf is not installed on this system. "
+                "Download from: https://wkhtmltopdf.org/downloads.html"
+            )
         raise e
 
     return path
 
 
 def _escape(text: str) -> str:
+    """
+    Escapes HTML special characters for safe rendering.
+    
+    Args:
+        text (str): Raw text to escape.
+        
+    Returns:
+        str: HTML-safe escaped string.
+    """
     if not text:
         return ""
     return (
@@ -412,5 +571,5 @@ def _escape(text: str) -> str:
         .replace("<", "&lt;")
         .replace(">", "&gt;")
         .replace('"', "&quot;")
-        .replace("[link] ", "🔗 ")
+        .replace("[link] ", "")
     )

@@ -1,5 +1,7 @@
 import os
 import sys
+from typing import Optional, Any
+
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -156,19 +158,23 @@ GLOBAL_HELP = """
 """
 
 
-def clear_screen():
+def clear_screen() -> None:
+    """Clears the terminal screen."""
     os.system("cls" if os.name == "nt" else "clear")
 
 
-def print_banner():
+def print_banner() -> None:
+    """Renders the application banner to the terminal."""
     console.print(BANNER)
 
 
-def print_separator():
-    console.print("[dim]─" * 75 + "[/dim]")
+def print_separator() -> None:
+    """Prints a horizontal separator line."""
+    console.print("[dim]" + "-" * 75 + "[/dim]")
 
 
-def render_menu(menu_key: str):
+def render_menu(menu_key: str) -> None:
+    """Renders the specified menu as a formatted table."""
     menu = MENUS[menu_key]
     items = menu["items"]
 
@@ -182,20 +188,21 @@ def render_menu(menu_key: str):
         padding=(0, 1),
     )
     table.add_column("No", style="bold bright_yellow", width=4, justify="center")
-    table.add_column("Komut", style="bold white", width=28)
-    table.add_column("Açıklama", style="dim white", width=40)
+    table.add_column("Command", style="bold white", width=28)
+    table.add_column("Description", style="dim white", width=40)
 
     for key, name, desc in items:
         table.add_row(key, name, desc)
 
     console.print(table)
     console.print(
-        "[dim]  Numarayı girin │ [bold]help[/bold] = yardım │ "
-        "[bold]back[/bold] = geri │ [bold]exit[/bold] = çıkış[/dim]"
+        "[dim]  Enter number | [bold]help[/bold] = help | "
+        "[bold]back[/bold] = back | [bold]exit[/bold] = quit[/dim]"
     )
 
 
-def show_screen(menu_key: str):
+def show_screen(menu_key: str) -> None:
+    """Clears the screen, prints the banner, and renders the specified menu."""
     clear_screen()
     print_banner()
     console.print()
@@ -204,33 +211,37 @@ def show_screen(menu_key: str):
 
 
 def get_input(label: str) -> str:
+    """Prompts for and returns user input with a styled label."""
     try:
-        val = console.input(f"  [bold red]{label}[/bold red] [bold white]›[/bold white] ").strip()
+        val = console.input(f"  [bold red]{label}[/bold red] [bold white]>[/bold white] ").strip()
         return val
     except (EOFError, KeyboardInterrupt):
         console.print()
         return "exit"
 
 
-def ask_target(prompt_text: str) -> str | None:
+def ask_target(prompt_text: str) -> Optional[str]:
+    """Prompts the user for a target input value."""
     try:
-        val = console.input(f"    [bold cyan]» {prompt_text}:[/bold cyan] ").strip()
+        val = console.input(f"    [bold cyan]> {prompt_text}:[/bold cyan] ").strip()
         return val if val else None
     except (EOFError, KeyboardInterrupt):
         console.print()
         return None
 
 
-def ask_optional(prompt_text: str) -> str | None:
+def ask_optional(prompt_text: str) -> Optional[str]:
+    """Prompts the user for an optional input value."""
     try:
-        val = console.input(f"    [dim cyan]» {prompt_text} (Enter = atla):[/dim cyan] ").strip()
+        val = console.input(f"    [dim cyan]> {prompt_text} (Enter = skip):[/dim cyan] ").strip()
         return val if val else None
     except (EOFError, KeyboardInterrupt):
         console.print()
         return None
 
 
-def is_global_command(cmd: str) -> str | None:
+def is_global_command(cmd: str) -> Optional[str]:
+    """Parses user input to identify global navigation commands."""
     c = cmd.lower()
     if c in ("help", "h", "?"):
         return "help"
@@ -240,14 +251,15 @@ def is_global_command(cmd: str) -> str | None:
         return "home"
     if c in ("clear", "cls", "temizle"):
         return "clear"
-    if c in ("exit", "quit", "q", "çıkış"):
+    if c in ("exit", "quit", "q"):
         return "exit"
     if c in ("status", "durum"):
         return "status"
     return None
 
 
-def handle_global(cmd: str, tor=None) -> bool:
+def handle_global(cmd: str, tor: Any = None) -> bool:
+    """Dispatches global command execution."""
     if cmd == "help":
         console.print(GLOBAL_HELP)
         return True
@@ -257,47 +269,50 @@ def handle_global(cmd: str, tor=None) -> bool:
         console.print()
         return True
     if cmd == "exit":
-        console.print("\n[bold yellow]  Oturum kapatılıyor...[/bold yellow]\n")
+        console.print("\n[bold yellow]  Terminating session...[/bold yellow]\n")
         if tor:
             tor.close()
         sys.exit(0)
     if cmd == "status":
-        console.print("  [dim]Durum kontrol ediliyor...[/dim]", end="\r")
-        if tor and tor.check_connection() and tor.active_proxy:
-            proxy = tor.active_proxy.get("http", "?")
+        console.print("  [dim]Checking status...[/dim]", end="\r")
+        if tor and tor.session and tor.tor_ip:
             console.print(Panel(
-                f"[bold green]● Tor Aktif[/bold green]  │  "
-                f"Proxy: [white]{proxy}[/white]  │  "
-                f"IP: [white]{tor.tor_ip or '?'}[/white]",
+                f"[bold green]Active[/bold green]  |  "
+                f"Exit IP: [white]{tor.tor_ip or '?'}[/white]",
                 border_style="green", box=box.ROUNDED,
             ))
         else:
             console.print(Panel(
-                "[bold red]● Tor Bağlantısı Yok veya Koptu[/bold red]",
+                "[bold red]Tor connection unavailable or disconnected[/bold red]",
                 border_style="red", box=box.ROUNDED,
             ))
         return True
     return False
 
 
-def wait_enter():
+def wait_enter() -> None:
+    """Pauses execution until the user presses Enter."""
     try:
-        console.input("\n  [dim]Devam etmek için Enter'a basın...[/dim]")
+        console.input("\n  [dim]Press Enter to continue...[/dim]")
     except (EOFError, KeyboardInterrupt):
         pass
 
 
-def print_error(msg: str):
-    console.print(f"  [bold red]✗ {msg}[/bold red]")
+def print_error(msg: str) -> None:
+    """Prints a formatted error message."""
+    console.print(f"  [bold red]ERROR: {msg}[/bold red]")
 
 
-def print_success(msg: str):
-    console.print(f"  [bold green]✓ {msg}[/bold green]")
+def print_success(msg: str) -> None:
+    """Prints a formatted success message."""
+    console.print(f"  [bold green]OK: {msg}[/bold green]")
 
 
-def print_info(msg: str):
-    console.print(f"  [bold cyan]ℹ {msg}[/bold cyan]")
+def print_info(msg: str) -> None:
+    """Prints a formatted informational message."""
+    console.print(f"  [bold cyan]INFO: {msg}[/bold cyan]")
 
 
-def print_warning(msg: str):
-    console.print(f"  [bold yellow]⚠ {msg}[/bold yellow]")
+def print_warning(msg: str) -> None:
+    """Prints a formatted warning message."""
+    console.print(f"  [bold yellow]WARN: {msg}[/bold yellow]")

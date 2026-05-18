@@ -9,23 +9,21 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Set the working directory in the container
 WORKDIR /app
 
-# Install system dependencies
-# We might need gcc for some Python packages like aiohttp_socks or sqlite headers
+# Install system dependencies including wkhtmltopdf for enterprise PDF reporting
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     gcc \
     libffi-dev \
     libssl-dev \
+    wkhtmltopdf \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements file first to leverage Docker cache
 COPY requirements.txt /app/
 
 # Install Python dependencies
-# Adding aiohttp, aiohttp_socks, pydantic-settings explicitly in case they aren't in requirements.txt yet
 RUN pip install --upgrade pip && \
-    pip install -r requirements.txt && \
-    pip install aiohttp aiohttp_socks pydantic-settings pdfkit
+    pip install -r requirements.txt
 
 # Copy the rest of the application codebase into the container
 COPY . /app/

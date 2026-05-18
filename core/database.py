@@ -3,7 +3,7 @@ import json
 import sqlite3
 import threading
 from datetime import datetime
-from dataclasses import asdict
+from typing import List, Dict, Any, Optional
 
 DB_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 DB_PATH = os.path.join(DB_DIR, "leakrecon.db")
@@ -11,20 +11,33 @@ DB_PATH = os.path.join(DB_DIR, "leakrecon.db")
 _lock = threading.Lock()
 
 
-def _ensure_dir():
+def _ensure_dir() -> None:
+    """Ensures that the directory for the SQLite database exists."""
     os.makedirs(DB_DIR, exist_ok=True)
 
 
 def _get_connection() -> sqlite3.Connection:
+    """
+    Creates and returns a SQLite connection optimized for concurrency.
+    Enforces Write-Ahead Logging (WAL) and explicit foreign key constraints.
+    
+    Returns:
+        sqlite3.Connection: A configured SQLite database connection.
+    """
     _ensure_dir()
     conn = sqlite3.connect(DB_PATH, timeout=10)
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA synchronous=NORMAL;")
+    conn.execute("PRAGMA foreign_keys=ON;")
     conn.row_factory = sqlite3.Row
     return conn
 
 
-def init_db():
+def init_db() -> None:
+    """
+    Initializes the database schema if it does not already exist.
+    Creates tables for scans and scan_results, along with appropriate indices.
+    """
     with _lock:
         conn = _get_connection()
         try:
@@ -64,6 +77,18 @@ def init_db():
 
 
 def save_scan(target: str, category: str, results: list, elapsed: float = 0) -> int:
+    """
+    Consolidates scan results and persists them into the database.
+    
+    Args:
+        target (str): The target identifier (IP, domain, etc.).
+        category (str): The category of the scan (e.g., 'Darkweb', 'Identity').
+        results (list): Raw list of ScanResult objects.
+        elapsed (float): Time taken to complete the scan in seconds.
+        
+    Returns:
+        int: The unique identifier (scan_id) of the newly inserted record.
+    """
     from modules.darkweb_scraper import _consolidate_results
 
     consolidated = _consolidate_results(results)
@@ -106,7 +131,16 @@ def save_scan(target: str, category: str, results: list, elapsed: float = 0) -> 
     return scan_id
 
 
-def get_history(limit: int = 50) -> list[dict]:
+def get_history(limit: int = 50) -> List[Dict[str, Any]]:
+    """
+    Retrieves the chronological scan history.
+    
+    Args:
+        limit (int): The maximum number of records to retrieve.
+        
+    Returns:
+        List[Dict[str, Any]]: A list of dictionaries containing scan metadata.
+    """
     with _lock:
         conn = _get_connection()
         try:
@@ -122,7 +156,17 @@ def get_history(limit: int = 50) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def get_scan_detail(scan_id: int) -> dict | None:
+def get_scan_detail(scan_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Retrieves complete details for a specific scan, including all results.
+    
+    Args:
+        scan_id (int): The unique identifier of the scan.
+        
+    Returns:
+        Optional[Dict[str, Any]]: A dictionary combining scan metadata and findings,
+        or None if not found.
+    """
     with _lock:
         conn = _get_connection()
         try:
@@ -142,7 +186,16 @@ def get_scan_detail(scan_id: int) -> dict | None:
     }
 
 
-def get_target_history(target: str) -> list[dict]:
+def get_target_history(target: str) -> List[Dict[str, Any]]:
+    """
+    Retrieves the chronological history of scans executed against a specific target.
+    
+    Args:
+        target (str): The specific target identifier.
+        
+    Returns:
+        List[Dict[str, Any]]: A list of scan metadata dictionaries.
+    """
     with _lock:
         conn = _get_connection()
         try:
@@ -157,7 +210,17 @@ def get_target_history(target: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-def get_scan_diff(target: str) -> dict | None:
+def get_scan_diff(target: str) -> Optional[Dict[str, Any]]:
+    """
+    Performs a differential analysis between the two most recent scans of a target.
+    
+    Args:
+        target (str): The target identifier to analyze.
+        
+    Returns:
+        Optional[Dict[str, Any]]: Differential results including resolved, new, and
+        unchanged findings, or None if insufficient history exists.
+    """
     scans = get_target_history(target)
     if len(scans) < 2:
         return None
@@ -196,7 +259,13 @@ def get_scan_diff(target: str) -> dict | None:
     }
 
 
-def get_stats() -> dict:
+def get_stats() -> Dict[str, Any]:
+    """
+    Aggregates global system statistics for operational oversight.
+    
+    Returns:
+        Dict[str, Any]: Application metrics including scan volumes and category distribution.
+    """
     with _lock:
         conn = _get_connection()
         try:
@@ -217,7 +286,11 @@ def get_stats() -> dict:
     }
 
 
-def clear_history():
+def clear_history() -> None:
+    """
+    Purges all operational data from the system database and attempts vacuuming.
+    Used for compliance and data retention lifecycle management.
+    """
     with _lock:
         conn = _get_connection()
         try:
@@ -226,7 +299,7 @@ def clear_history():
             try:
                 conn.execute("VACUUM")
             except sqlite3.OperationalError:
-                # VACUUM requires exclusive lock; ignore if failed
+                # VACUUM requires an exclusive lock and cannot run inside a transaction
                 pass
             conn.commit()
         finally:
