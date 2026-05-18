@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="img/leak.png" alt="LeakRecon Banner" width="800">
+  <img src="img/banner.png" alt="LeakRecon Banner" width="800">
   
   # LeakRecon
   **High-Performance Asynchronous OSINT & Dark Web Intelligence Framework**
@@ -19,7 +19,8 @@
 
 From tracking cryptocurrency transactions related to ransomware to uncovering compromised credentials and charting identity footprints, LeakRecon centralizes advanced reconnaissance into a unified, visually stunning CLI interface.
 
-![LeakRecon Menu Interface](img/cmd.png)
+![LeakRecon Interactive CLI](img/cmd.png)
+*LeakRecon's Interactive Command Line Interface.*
 
 ---
 
@@ -39,13 +40,17 @@ LeakRecon persists all scan findings locally via a thread-safe SQLite backend. I
 - **PDF:** Polished, static document formats powered by `pdfkit` and `wkhtmltopdf`.
 - **JSON/CSV:** Raw data exports for SIEM and custom data pipeline integrations.
 
-![LeakRecon Results View](img/result.png)
+![LeakRecon HTML Report](img/leak.png)
+*Example of a generated comprehensive HTML Intelligence Report.*
 
 ---
 
 ## 🧩 Reconnaissance Modules
 
-LeakRecon operates through several highly specialized modules, each focused on a unique vector of intelligence:
+LeakRecon operates through several highly specialized modules, each focused on a unique vector of intelligence.
+
+![LeakRecon Scan Result](img/result.png)
+*Real-time username testing and identity profiling via CLI.*
 
 1. **Dark Web Scraper (`modules/darkweb_scraper.py`)**
    - Conducts concurrent dork searches across deep web repositories, paste sites, and Tor-native search engines (e.g., Ahmia, Onion DuckDuckGo).
