@@ -1,5 +1,6 @@
 import os
 import time
+import asyncio
 from bs4 import BeautifulSoup
 from rich.console import Console
 from rich.table import Table
@@ -19,22 +20,23 @@ class OnionScanner:
             return f"http://{url}"
         return url
 
-    def check_status(self, onion_url: str):
+    async def check_status(self, onion_url: str):
         onion_url = self._ensure_url(onion_url)
         console.print(f"\n  [bold white][ ONION ] Durum kontrolü: {onion_url}[/bold white]")
         start = time.time()
 
         try:
-            resp = self.tor.get(onion_url, timeout=60)
+            response = await self.tor.get(onion_url, timeout=60)
             elapsed = time.time() - start
 
-            if resp:
+            if response:
+                content = await response.read()
                 console.print(Panel(
                     f"[bold green]● ÇEVRİMİÇİ[/bold green]\n\n"
                     f"  [white]URL:[/white] {onion_url}\n"
-                    f"  [white]Status Code:[/white] {resp.status_code}\n"
+                    f"  [white]Status Code:[/white] {response.status}\n"
                     f"  [white]Yanıt Süresi:[/white] {elapsed:.2f}s\n"
-                    f"  [white]Content-Length:[/white] {len(resp.content)} byte",
+                    f"  [white]Content-Length:[/white] {len(content)} byte",
                     title="[bold cyan]ONION DURUM[/bold cyan]",
                     border_style="green", box=box.ROUNDED,
                 ))
@@ -49,13 +51,13 @@ class OnionScanner:
         except Exception as e:
             console.print(f"  [bold red][ HATA ] {e}[/bold red]")
 
-    def http_headers(self, onion_url: str):
+    async def http_headers(self, onion_url: str):
         onion_url = self._ensure_url(onion_url)
         console.print(f"\n  [bold white][ HEADER ] Onion HTTP headers: {onion_url}[/bold white]")
 
         try:
-            resp = self.tor.get(onion_url, timeout=60)
-            if resp:
+            response = await self.tor.get(onion_url, timeout=60)
+            if response:
                 table = Table(
                     title="[bold]ONION HTTP HEADERS[/bold]",
                     box=box.ROUNDED, show_lines=True,
@@ -64,8 +66,8 @@ class OnionScanner:
                 table.add_column("Header", style="bold white", width=30)
                 table.add_column("Değer", style="white", width=56)
 
-                table.add_row("Status Code", f"[bold]{resp.status_code}[/bold]")
-                for key, val in resp.headers.items():
+                table.add_row("Status Code", f"[bold]{response.status}[/bold]")
+                for key, val in response.headers.items():
                     table.add_row(key, val[:80])
 
                 console.print()
@@ -75,14 +77,15 @@ class OnionScanner:
         except Exception as e:
             console.print(f"  [bold red][ HATA ] {e}[/bold red]")
 
-    def page_meta(self, onion_url: str):
+    async def page_meta(self, onion_url: str):
         onion_url = self._ensure_url(onion_url)
         console.print(f"\n  [bold white][ META ] Sayfa meta bilgileri: {onion_url}[/bold white]")
 
         try:
-            resp = self.tor.get(onion_url, timeout=60)
-            if resp:
-                soup = BeautifulSoup(resp.text, "lxml")
+            response = await self.tor.get(onion_url, timeout=60)
+            if response:
+                text = await response.text()
+                soup = BeautifulSoup(text, "lxml")
                 title = soup.title.string.strip() if soup.title and soup.title.string else "Yok"
                 desc = ""
                 keywords = ""
@@ -123,16 +126,16 @@ class OnionScanner:
         except Exception as e:
             console.print(f"  [bold red][ HATA ] {e}[/bold red]")
 
-    def detect_tech(self, onion_url: str):
+    async def detect_tech(self, onion_url: str):
         onion_url = self._ensure_url(onion_url)
         console.print(f"\n  [bold white][ TECH ] Teknoloji tespiti: {onion_url}[/bold white]")
 
         try:
-            resp = self.tor.get(onion_url, timeout=60)
-            if resp:
+            response = await self.tor.get(onion_url, timeout=60)
+            if response:
                 techs = []
-                headers = resp.headers
-                html = resp.text.lower()
+                headers = response.headers
+                html = (await response.text()).lower()
 
                 if headers.get("Server"):
                     techs.append(("Sunucu", headers["Server"]))
@@ -192,7 +195,7 @@ class OnionScanner:
         except Exception as e:
             console.print(f"  [bold red][ HATA ] {e}[/bold red]")
 
-    def bulk_scan(self, file_path: str):
+    async def bulk_scan(self, file_path: str):
         if not os.path.isfile(file_path):
             console.print(f"  [bold red][ HATA ] Dosya bulunamadı: {file_path}[/bold red]")
             return
@@ -222,9 +225,9 @@ class OnionScanner:
             start = time.time()
 
             try:
-                resp = self.tor.get(url, timeout=45)
+                response = await self.tor.get(url, timeout=45)
                 elapsed = time.time() - start
-                if resp:
+                if response:
                     table.add_row(str(idx), url, "[bold green]● AÇIK[/bold green]", f"{elapsed:.1f}s")
                 else:
                     table.add_row(str(idx), url, "[bold red]● KAPALI[/bold red]", "-")
@@ -234,26 +237,27 @@ class OnionScanner:
         console.print()
         console.print(table)
 
-    def download_page(self, onion_url: str, output_path: str = ""):
+    async def download_page(self, onion_url: str, output_path: str = ""):
         onion_url = self._ensure_url(onion_url)
         console.print(f"\n  [bold white][ İNDİR ] Sayfa indiriliyor: {onion_url}[/bold white]")
 
         try:
-            resp = self.tor.get(onion_url, timeout=60)
-            if resp:
+            response = await self.tor.get(onion_url, timeout=60)
+            if response:
+                text = await response.text()
                 if not output_path:
                     safe = onion_url.replace("http://", "").replace("https://", "")
                     safe = "".join(c if c.isalnum() or c in ".-_" else "_" for c in safe)
                     output_path = f"output_{safe[:50]}.html"
 
                 with open(output_path, "w", encoding="utf-8") as f:
-                    f.write(resp.text)
+                    f.write(text)
 
                 console.print(Panel(
                     f"[bold green]✓ Sayfa kaydedildi[/bold green]\n\n"
                     f"  [white]URL:[/white] {onion_url}\n"
                     f"  [white]Dosya:[/white] {output_path}\n"
-                    f"  [white]Boyut:[/white] {len(resp.text)} karakter",
+                    f"  [white]Boyut:[/white] {len(text)} karakter",
                     title="[bold cyan]SAYFA İNDİRME[/bold cyan]",
                     border_style="green", box=box.ROUNDED,
                 ))
@@ -262,21 +266,22 @@ class OnionScanner:
         except Exception as e:
             console.print(f"  [bold red][ HATA ] {e}[/bold red]")
 
-    def extract_links(self, onion_url: str):
+    async def extract_links(self, onion_url: str):
         onion_url = self._ensure_url(onion_url)
         console.print(f"\n  [bold white][ LINK ] Link çıkarılıyor: {onion_url}[/bold white]")
 
         try:
-            resp = self.tor.get(onion_url, timeout=60)
-            if resp:
-                soup = BeautifulSoup(resp.text, "lxml")
+            response = await self.tor.get(onion_url, timeout=60)
+            if response:
+                text = await response.text()
+                soup = BeautifulSoup(text, "lxml")
                 links = []
 
                 for a in soup.find_all("a", href=True):
                     href = a["href"]
-                    text = a.get_text(strip=True)[:40]
+                    text_content = a.get_text(strip=True)[:40]
                     if href.startswith(("http", "/", "#")):
-                        links.append((href, text))
+                        links.append((href, text_content))
 
                 table = Table(
                     title=f"[bold]ÇIKARILAN LİNKLER ({len(links)} adet)[/bold]",
@@ -287,10 +292,10 @@ class OnionScanner:
                 table.add_column("URL", style="white", width=60)
                 table.add_column("Metin", style="dim", width=32)
 
-                for idx, (href, text) in enumerate(links[:50], 1):
+                for idx, (href, text_content) in enumerate(links[:50], 1):
                     is_onion = "[bold cyan]" if ".onion" in href else ""
                     end = "[/bold cyan]" if ".onion" in href else ""
-                    table.add_row(str(idx), f"{is_onion}{href[:58]}{end}", text)
+                    table.add_row(str(idx), f"{is_onion}{href[:58]}{end}", text_content)
 
                 console.print()
                 console.print(table)
@@ -302,14 +307,15 @@ class OnionScanner:
         except Exception as e:
             console.print(f"  [bold red][ HATA ] {e}[/bold red]")
 
-    def save_text(self, onion_url: str):
+    async def save_text(self, onion_url: str):
         onion_url = self._ensure_url(onion_url)
         console.print(f"\n  [bold white][ TEXT ] Düz metin çıkarılıyor: {onion_url}[/bold white]")
 
         try:
-            resp = self.tor.get(onion_url, timeout=60)
-            if resp:
-                soup = BeautifulSoup(resp.text, "lxml")
+            response = await self.tor.get(onion_url, timeout=60)
+            if response:
+                html = await response.text()
+                soup = BeautifulSoup(html, "lxml")
                 text = soup.get_text(separator="\n", strip=True)
 
                 safe = onion_url.replace("http://", "").replace("https://", "")

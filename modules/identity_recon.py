@@ -1,4 +1,5 @@
 import time
+import asyncio
 import json
 from rich.console import Console
 from rich.table import Table
@@ -118,26 +119,25 @@ class IdentityRecon:
         self.tor = tor_handler
         self.scraper = DarkWebScraper(tor_handler)
 
-    def _check_api(self, name: str, url: str, timeout: int = 15, headers: dict = None) -> dict | None:
+    async def _check_api(self, name: str, url: str, timeout: int = 15, headers: dict = None) -> dict | None:
         try:
-            resp = self.tor.get(url, timeout=timeout, headers=headers)
-            if resp and resp.status_code == 200:
+            response = await self.tor.get(url, timeout=timeout, headers=headers)
+            if response and response.status == 200:
                 try:
-                    return resp.json()
+                    return await response.json()
                 except Exception:
                     return None
         except Exception:
             pass
         return None
 
-    def _run_email_apis(self, email: str) -> list[dict]:
+    async def _run_email_apis(self, email: str) -> list[dict]:
         api_results = []
 
         console.print(f"\n[bold magenta][ API İSTİHBARAT ][/bold magenta]")
 
-
         console.print(f"  [dim cyan]→ EmailRep.io kontrol ediliyor...[/dim cyan]")
-        data = self._check_api(
+        data = await self._check_api(
             "emailrep", f"https://emailrep.io/{email}",
             headers={"Accept": "application/json"},
         )
@@ -185,11 +185,10 @@ class IdentityRecon:
             })
             console.print(f"  [dim yellow]✗ EmailRep.io: Yanıt alınamadı[/dim yellow]")
 
-
         console.print(f"  [dim cyan]→ E-posta format doğrulaması...[/dim cyan]")
         if "@" in email:
             domain = email.split("@")[1]
-            mx_data = self._check_api("mx", f"https://dns.google/resolve?name={domain}&type=MX")
+            mx_data = await self._check_api("mx", f"https://dns.google/resolve?name={domain}&type=MX")
             if mx_data and mx_data.get("Answer"):
                 api_results.append({
                     "source": "DNS/MX Kontrolü",
@@ -224,17 +223,15 @@ class IdentityRecon:
         console.print(table)
         console.print()
 
-    def _run_search(self, target: str, category: str, label: str):
+    async def _run_search(self, target: str, category: str, label: str):
         dorks = DORKS.get(category, ['"{target}"'])
         all_results = []
         api_results = []
 
         console.print(f"\n[bold white][ TARAMA ] {label} taranıyor: {target}[/bold white]")
 
-
         if category == "email":
-            api_results = self._run_email_apis(target)
-
+            api_results = await self._run_email_apis(target)
 
         console.print(f"\n[dim]  {len(dorks)} dork sorgusu taranacak...[/dim]")
         start = time.time()
@@ -252,7 +249,7 @@ class IdentityRecon:
             for dork_template in dorks:
                 dork = dork_template.replace("{target}", target)
                 console.print(f"\n[dim]  Dork: {dork}[/dim]")
-                results = self.scraper.search(target=dork, sources="all")
+                results = await self.scraper.search(target=dork, sources="all")
                 all_results.extend(results)
                 progress.advance(task)
 
@@ -264,26 +261,26 @@ class IdentityRecon:
         display_results(target, label, all_results, elapsed)
         return all_results
 
-    def search_email(self, target: str):
-        return self._run_search(target, "email", "E-posta OSINT")
+    async def search_email(self, target: str):
+        return await self._run_search(target, "email", "E-posta OSINT")
 
-    def search_username(self, target: str):
-        return self._run_search(target, "username", "Kullanıcı Adı Profilleme")
+    async def search_username(self, target: str):
+        return await self._run_search(target, "username", "Kullanıcı Adı Profilleme")
 
-    def search_phone(self, target: str):
-        return self._run_search(target, "phone", "Telefon Numarası İzleme")
+    async def search_phone(self, target: str):
+        return await self._run_search(target, "phone", "Telefon Numarası İzleme")
 
-    def search_name(self, target: str):
-        return self._run_search(target, "name", "İsim Araştırma")
+    async def search_name(self, target: str):
+        return await self._run_search(target, "name", "İsim Araştırma")
 
-    def search_domain(self, target: str):
-        return self._run_search(target, "domain", "Domain / Organizasyon")
+    async def search_domain(self, target: str):
+        return await self._run_search(target, "domain", "Domain / Organizasyon")
 
-    def search_hash(self, target: str):
-        return self._run_search(target, "hash", "Hash Kontrolü")
+    async def search_hash(self, target: str):
+        return await self._run_search(target, "hash", "Hash Kontrolü")
 
-    def search_social(self, target: str):
-        return self._run_search(target, "social", "Sosyal Medya Handle")
+    async def search_social(self, target: str):
+        return await self._run_search(target, "social", "Sosyal Medya Handle")
 
-    def search_address(self, target: str):
-        return self._run_search(target, "address", "Fiziksel Adres Arama")
+    async def search_address(self, target: str):
+        return await self._run_search(target, "address", "Fiziksel Adres Arama")

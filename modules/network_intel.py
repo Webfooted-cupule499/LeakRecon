@@ -1,11 +1,11 @@
 import socket
 import struct
 import time
+import asyncio
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from rich import box
-from bs4 import BeautifulSoup
 from modules.darkweb_scraper import DarkWebScraper, display_results
 
 console = Console()
@@ -28,47 +28,46 @@ class NetworkIntel:
     def __init__(self, tor_handler):
         self.tor = tor_handler
         self.scraper = DarkWebScraper(tor_handler)
-        self._proxy_host = "127.0.0.1"
-        self._proxy_port = self._detect_proxy_port()
+        from config import settings
+        self._proxy_host = settings.TOR_PROXY_HOST
+        self._proxy_port = settings.TOR_PROXY_PORT
 
-    def _detect_proxy_port(self) -> int:
-        if self.tor.active_proxy:
-            addr = self.tor.active_proxy.get("http", "")
-            if "9150" in addr:
-                return 9150
-        return 9050
-
-    def _socks5_connect(self, target_host: str, target_port: int, timeout: int = 10) -> bool:
+    async def _socks5_connect(self, target_host: str, target_port: int, timeout: int = 10) -> bool:
         try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(timeout)
-            s.connect((self._proxy_host, self._proxy_port))
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(self._proxy_host, self._proxy_port),
+                timeout=timeout
+            )
 
-            s.sendall(b"\x05\x01\x00")
-            resp = s.recv(2)
+            writer.write(b"\x05\x01\x00")
+            await writer.drain()
+            resp = await asyncio.wait_for(reader.read(2), timeout=timeout)
             if resp != b"\x05\x00":
-                s.close()
+                writer.close()
+                await writer.wait_closed()
                 return False
 
             addr_bytes = target_host.encode("utf-8")
             req = b"\x05\x01\x00\x03" + bytes([len(addr_bytes)]) + addr_bytes + struct.pack("!H", target_port)
-            s.sendall(req)
+            writer.write(req)
+            await writer.drain()
 
-            resp = s.recv(10)
-            s.close()
+            resp = await asyncio.wait_for(reader.read(10), timeout=timeout)
+            writer.close()
+            await writer.wait_closed()
             return len(resp) >= 2 and resp[1] == 0x00
 
         except Exception:
             return False
 
-    def ip_geolocation(self, ip: str):
+    async def ip_geolocation(self, ip: str):
         console.print(f"\n[bold white][ GEO ] IP Geolocation sorgulanıyor: {ip}[/bold white]")
         start = time.time()
 
         try:
-            resp = self.tor.get(f"http://ip-api.com/json/{ip}?lang=tr", timeout=30)
-            if resp and resp.status_code == 200:
-                data = resp.json()
+            response = await self.tor.get(f"http://ip-api.com/json/{ip}?lang=tr", timeout=30)
+            if response and response.status == 200:
+                data = await response.json()
                 elapsed = time.time() - start
 
                 table = Table(
@@ -105,11 +104,12 @@ class NetworkIntel:
         except Exception as e:
             console.print(f"[bold red][ HATA ] {e}[/bold red]")
 
-    def reverse_dns(self, ip: str):
+    async def reverse_dns(self, ip: str):
         console.print(f"\n[bold white][ DNS ] Reverse DNS sorgulanıyor: {ip}[/bold white]")
 
         try:
-            hostname, _, _ = socket.gethostbyaddr(ip)
+            loop = asyncio.get_running_loop()
+            hostname, _, _ = await loop.run_in_executor(None, socket.gethostbyaddr, ip)
             console.print(Panel(
                 f"[bold white]IP:[/bold white] {ip}\n[bold white]Hostname:[/bold white] [green]{hostname}[/green]",
                 title="[bold cyan]REVERSE DNS[/bold cyan]",
@@ -124,7 +124,7 @@ class NetworkIntel:
         except Exception as e:
             console.print(f"[bold red][ HATA ] {e}[/bold red]")
 
-    def port_scan(self, target: str, ports: list[int] | None = None):
+    async def port_scan(self, target: str, ports: list[int] | None = None):
         scan_ports = ports or COMMON_PORTS
         console.print(f"\n[bold white][ PORT ] Port taraması başlatılıyor: {target}[/bold white]")
         console.print(f"[dim]  {len(scan_ports)} port taranacak (Tor SOCKS üzerinden)[/dim]\n")
@@ -137,7 +137,7 @@ class NetworkIntel:
             service = PORT_SERVICES.get(port, "Unknown")
             console.print(f"  [dim]→ {port}/{service}...[/dim]", end="")
 
-            is_open = self._socks5_connect(target, port, timeout=10)
+            is_open = await self._socks5_connect(target, port, timeout=10)
             if is_open:
                 open_ports.append((port, service))
                 console.print(f" [bold green]AÇIK[/bold green]")
@@ -169,15 +169,16 @@ class NetworkIntel:
             f"Süre: {elapsed:.1f}s | Tor SOCKS proxy[/dim]\n"
         )
 
-    def tor_exit_check(self, ip: str):
+    async def tor_exit_check(self, ip: str):
         console.print(f"\n[bold white][ TOR ] Tor çıkış düğümü kontrolü: {ip}[/bold white]")
 
         try:
-            resp = self.tor.get(
+            response = await self.tor.get(
                 "https://check.torproject.org/torbulkexitlist", timeout=30
             )
-            if resp and resp.status_code == 200:
-                exit_nodes = resp.text.strip().split("\n")
+            if response and response.status == 200:
+                text = await response.text()
+                exit_nodes = text.strip().split("\n")
                 exit_nodes = [line.strip() for line in exit_nodes if not line.startswith("#")]
 
                 if ip in exit_nodes:
@@ -199,19 +200,19 @@ class NetworkIntel:
         except Exception as e:
             console.print(f"[bold red][ HATA ] {e}[/bold red]")
 
-    def ip_reputation(self, ip: str):
+    async def ip_reputation(self, ip: str):
         console.print(f"\n[bold white][ İTİBAR ] IP dark web itibar analizi: {ip}[/bold white]")
         start = time.time()
-        results = self.scraper.search(ip, dork="blacklist abuse spam malware botnet")
+        results = await self.scraper.search(ip, dork="blacklist abuse spam malware botnet")
         elapsed = time.time() - start
         display_results(ip, "IP İtibar Analizi", results, elapsed)
 
-    def fetch_headers(self, url: str):
+    async def fetch_headers(self, url: str):
         console.print(f"\n[bold white][ HEADER ] HTTP header çekiliyor: {url}[/bold white]")
 
         try:
-            resp = self.tor.get(url, timeout=30)
-            if resp:
+            response = await self.tor.get(url, timeout=30)
+            if response:
                 table = Table(
                     title=f"[bold]HTTP HEADERS[/bold]",
                     box=box.ROUNDED, show_lines=True,
@@ -220,8 +221,8 @@ class NetworkIntel:
                 table.add_column("Header", style="bold white", width=30)
                 table.add_column("Değer", style="white", width=56)
 
-                table.add_row("Status Code", f"[bold green]{resp.status_code}[/bold green]")
-                for key, value in resp.headers.items():
+                table.add_row("Status Code", f"[bold green]{response.status}[/bold green]")
+                for key, value in response.headers.items():
                     table.add_row(key, value[:80])
 
                 console.print()
@@ -232,13 +233,13 @@ class NetworkIntel:
         except Exception as e:
             console.print(f"[bold red][ HATA ] {e}[/bold red]")
 
-    def whois_lookup(self, target: str):
+    async def whois_lookup(self, target: str):
         console.print(f"\n[bold white][ WHOIS ] WHOIS sorgulanıyor: {target}[/bold white]")
 
         try:
-            resp = self.tor.get(f"https://whois.arin.net/rest/ip/{target}.json", timeout=30)
-            if resp and resp.status_code == 200:
-                data = resp.json()
+            response = await self.tor.get(f"https://whois.arin.net/rest/ip/{target}.json", timeout=30)
+            if response and response.status == 200:
+                data = await response.json()
                 net = data.get("net", {})
 
                 table = Table(
@@ -265,9 +266,9 @@ class NetworkIntel:
                 console.print(table)
                 console.print()
             else:
-                resp2 = self.tor.get(f"https://rdap.org/domain/{target}", timeout=30)
-                if resp2 and resp2.status_code == 200:
-                    data = resp2.json()
+                response2 = await self.tor.get(f"https://rdap.org/domain/{target}", timeout=30)
+                if response2 and response2.status == 200:
+                    data = await response2.json()
                     table = Table(
                         title="[bold]WHOIS / RDAP SONUÇLARI[/bold]",
                         box=box.ROUNDED, show_lines=True,

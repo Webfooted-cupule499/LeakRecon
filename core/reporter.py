@@ -313,8 +313,18 @@ def export_html(scan_ids: list[int] | None = None) -> str:
 
         @media print {{
             body {{ background: #fff; color: #333; }}
-            .scan-block {{ border-color: #ddd; }}
+            .scan-block {{ border-color: #ddd; background: #fff; color: #333; }}
+            .scan-header {{ background: #f0f0f0; border-color: #ddd; }}
+            .scan-header h2 {{ color: #333; }}
+            table {{ border: 1px solid #ddd; }}
+            th {{ background: #f0f0f0; color: #333; border-bottom: 2px solid #ddd; }}
+            td {{ border-top: 1px solid #ddd; color: #333; }}
+            .source {{ color: #333; }}
+            .detail {{ color: #555; }}
             .header h1 {{ color: #1a1a1a; -webkit-text-fill-color: #1a1a1a; }}
+            .overview-card {{ background: #fff; border-color: #ddd; }}
+            .overview-card .number {{ color: #333; }}
+            .overview-card .label {{ color: #666; }}
         }}
     </style>
 </head>
@@ -357,6 +367,39 @@ def export_html(scan_ids: list[int] | None = None) -> str:
 
     with open(path, "w", encoding="utf-8") as f:
         f.write(html)
+
+    return path
+
+
+def export_pdf(scan_ids: list[int] | None = None) -> str:
+    _ensure_dir()
+    try:
+        import pdfkit
+    except ImportError:
+        raise ImportError("PDF raporu oluşturmak için 'pdfkit' kütüphanesi eksik. Lütfen 'pip install pdfkit' komutunu çalıştırın. Ayrıca sisteminizde 'wkhtmltopdf' kurulu olmalıdır.")
+
+    html_path = export_html(scan_ids)
+    fname = f"leakrecon_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+    path = os.path.join(REPORT_DIR, fname)
+
+    options = {
+        'page-size': 'A4',
+        'margin-top': '0.75in',
+        'margin-right': '0.75in',
+        'margin-bottom': '0.75in',
+        'margin-left': '0.75in',
+        'encoding': "UTF-8",
+        'enable-local-file-access': None,
+        'no-outline': None,
+        'print-media-type': None  # HTML'deki @media print CSS'ini kullanmak icin
+    }
+
+    try:
+        pdfkit.from_file(html_path, path, options=options)
+    except OSError as e:
+        if "No wkhtmltopdf executable found" in str(e):
+            raise OSError("Sisteminizde 'wkhtmltopdf' kurulu değil. Lütfen yükleyin: https://wkhtmltopdf.org/downloads.html veya Ubuntu/Debian için 'apt install wkhtmltopdf' kullanın.")
+        raise e
 
     return path
 

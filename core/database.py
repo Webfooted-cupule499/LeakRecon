@@ -27,38 +27,40 @@ def _get_connection() -> sqlite3.Connection:
 def init_db():
     with _lock:
         conn = _get_connection()
-        conn.executescript("""
-            CREATE TABLE IF NOT EXISTS scans (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                target      TEXT    NOT NULL,
-                category    TEXT    NOT NULL,
-                timestamp   TEXT    NOT NULL,
-                duration    REAL    NOT NULL DEFAULT 0,
-                source_count INTEGER NOT NULL DEFAULT 0,
-                query_count  INTEGER NOT NULL DEFAULT 0,
-                found_count  INTEGER NOT NULL DEFAULT 0,
-                clean_count  INTEGER NOT NULL DEFAULT 0,
-                error_count  INTEGER NOT NULL DEFAULT 0,
-                skipped_count INTEGER NOT NULL DEFAULT 0
-            );
+        try:
+            conn.executescript("""
+                CREATE TABLE IF NOT EXISTS scans (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    target      TEXT    NOT NULL,
+                    category    TEXT    NOT NULL,
+                    timestamp   TEXT    NOT NULL,
+                    duration    REAL    NOT NULL DEFAULT 0,
+                    source_count INTEGER NOT NULL DEFAULT 0,
+                    query_count  INTEGER NOT NULL DEFAULT 0,
+                    found_count  INTEGER NOT NULL DEFAULT 0,
+                    clean_count  INTEGER NOT NULL DEFAULT 0,
+                    error_count  INTEGER NOT NULL DEFAULT 0,
+                    skipped_count INTEGER NOT NULL DEFAULT 0
+                );
 
-            CREATE TABLE IF NOT EXISTS scan_results (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                scan_id     INTEGER NOT NULL,
-                source_name TEXT    NOT NULL,
-                source_url  TEXT,
-                found       INTEGER NOT NULL DEFAULT 0,
-                snippets    TEXT,
-                error       TEXT,
-                FOREIGN KEY (scan_id) REFERENCES scans(id) ON DELETE CASCADE
-            );
+                CREATE TABLE IF NOT EXISTS scan_results (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    scan_id     INTEGER NOT NULL,
+                    source_name TEXT    NOT NULL,
+                    source_url  TEXT,
+                    found       INTEGER NOT NULL DEFAULT 0,
+                    snippets    TEXT,
+                    error       TEXT,
+                    FOREIGN KEY (scan_id) REFERENCES scans(id) ON DELETE CASCADE
+                );
 
-            CREATE INDEX IF NOT EXISTS idx_scans_target ON scans(target);
-            CREATE INDEX IF NOT EXISTS idx_scans_timestamp ON scans(timestamp);
-            CREATE INDEX IF NOT EXISTS idx_results_scan ON scan_results(scan_id);
-        """)
-        conn.commit()
-        conn.close()
+                CREATE INDEX IF NOT EXISTS idx_scans_target ON scans(target);
+                CREATE INDEX IF NOT EXISTS idx_scans_timestamp ON scans(timestamp);
+                CREATE INDEX IF NOT EXISTS idx_results_scan ON scan_results(scan_id);
+            """)
+            conn.commit()
+        finally:
+            conn.close()
 
 
 def save_scan(target: str, category: str, results: list, elapsed: float = 0) -> int:
@@ -75,30 +77,31 @@ def save_scan(target: str, category: str, results: list, elapsed: float = 0) -> 
 
     with _lock:
         conn = _get_connection()
-        cursor = conn.execute(
-            """INSERT INTO scans (target, category, timestamp, duration,
-               source_count, query_count, found_count, clean_count,
-               error_count, skipped_count)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (target, category, ts, elapsed,
-             len(consolidated), len(results),
-             found, clean, errors, skipped),
-        )
-        scan_id = cursor.lastrowid
-
-        for r in consolidated:
-            conn.execute(
-                """INSERT INTO scan_results
-                   (scan_id, source_name, source_url, found, snippets, error)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (scan_id, r.source_name, r.source_url,
-                 1 if r.found else 0,
-                 json.dumps(r.matched_snippets, ensure_ascii=False) if r.matched_snippets else None,
-                 r.error),
+        try:
+            cursor = conn.execute(
+                """INSERT INTO scans (target, category, timestamp, duration,
+                   source_count, query_count, found_count, clean_count,
+                   error_count, skipped_count)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (target, category, ts, elapsed,
+                 len(consolidated), len(results),
+                 found, clean, errors, skipped),
             )
+            scan_id = cursor.lastrowid
 
-        conn.commit()
-        conn.close()
+            for r in consolidated:
+                conn.execute(
+                    """INSERT INTO scan_results
+                       (scan_id, source_name, source_url, found, snippets, error)
+                       VALUES (?, ?, ?, ?, ?, ?)""",
+                    (scan_id, r.source_name, r.source_url,
+                     1 if r.found else 0,
+                     json.dumps(r.matched_snippets, ensure_ascii=False) if r.matched_snippets else None,
+                     r.error),
+                )
+            conn.commit()
+        finally:
+            conn.close()
 
     return scan_id
 
@@ -106,29 +109,32 @@ def save_scan(target: str, category: str, results: list, elapsed: float = 0) -> 
 def get_history(limit: int = 50) -> list[dict]:
     with _lock:
         conn = _get_connection()
-        rows = conn.execute(
-            """SELECT id, target, category, timestamp, duration,
-                      source_count, query_count, found_count,
-                      clean_count, error_count, skipped_count
-               FROM scans ORDER BY id DESC LIMIT ?""",
-            (limit,),
-        ).fetchall()
-        conn.close()
+        try:
+            rows = conn.execute(
+                """SELECT id, target, category, timestamp, duration,
+                          source_count, query_count, found_count,
+                          clean_count, error_count, skipped_count
+                   FROM scans ORDER BY id DESC LIMIT ?""",
+                (limit,),
+            ).fetchall()
+        finally:
+            conn.close()
     return [dict(r) for r in rows]
 
 
 def get_scan_detail(scan_id: int) -> dict | None:
     with _lock:
         conn = _get_connection()
-        scan = conn.execute("SELECT * FROM scans WHERE id = ?", (scan_id,)).fetchone()
-        if not scan:
+        try:
+            scan = conn.execute("SELECT * FROM scans WHERE id = ?", (scan_id,)).fetchone()
+            if not scan:
+                return None
+            results = conn.execute(
+                "SELECT * FROM scan_results WHERE scan_id = ? ORDER BY id",
+                (scan_id,),
+            ).fetchall()
+        finally:
             conn.close()
-            return None
-        results = conn.execute(
-            "SELECT * FROM scan_results WHERE scan_id = ? ORDER BY id",
-            (scan_id,),
-        ).fetchall()
-        conn.close()
 
     return {
         "scan": dict(scan),
@@ -139,13 +145,15 @@ def get_scan_detail(scan_id: int) -> dict | None:
 def get_target_history(target: str) -> list[dict]:
     with _lock:
         conn = _get_connection()
-        rows = conn.execute(
-            """SELECT id, target, category, timestamp, duration,
-                      found_count, clean_count, error_count
-               FROM scans WHERE target = ? ORDER BY id DESC""",
-            (target,),
-        ).fetchall()
-        conn.close()
+        try:
+            rows = conn.execute(
+                """SELECT id, target, category, timestamp, duration,
+                          found_count, clean_count, error_count
+                   FROM scans WHERE target = ? ORDER BY id DESC""",
+                (target,),
+            ).fetchall()
+        finally:
+            conn.close()
     return [dict(r) for r in rows]
 
 
@@ -191,13 +199,15 @@ def get_scan_diff(target: str) -> dict | None:
 def get_stats() -> dict:
     with _lock:
         conn = _get_connection()
-        total = conn.execute("SELECT COUNT(*) as c FROM scans").fetchone()["c"]
-        found_total = conn.execute("SELECT SUM(found_count) as c FROM scans").fetchone()["c"] or 0
-        unique_targets = conn.execute("SELECT COUNT(DISTINCT target) as c FROM scans").fetchone()["c"]
-        categories = conn.execute(
-            "SELECT category, COUNT(*) as c FROM scans GROUP BY category ORDER BY c DESC"
-        ).fetchall()
-        conn.close()
+        try:
+            total = conn.execute("SELECT COUNT(*) as c FROM scans").fetchone()["c"]
+            found_total = conn.execute("SELECT SUM(found_count) as c FROM scans").fetchone()["c"] or 0
+            unique_targets = conn.execute("SELECT COUNT(DISTINCT target) as c FROM scans").fetchone()["c"]
+            categories = conn.execute(
+                "SELECT category, COUNT(*) as c FROM scans GROUP BY category ORDER BY c DESC"
+            ).fetchall()
+        finally:
+            conn.close()
 
     return {
         "total_scans": total,
@@ -210,8 +220,14 @@ def get_stats() -> dict:
 def clear_history():
     with _lock:
         conn = _get_connection()
-        conn.execute("DELETE FROM scan_results")
-        conn.execute("DELETE FROM scans")
-        conn.execute("VACUUM")
-        conn.commit()
-        conn.close()
+        try:
+            conn.execute("DELETE FROM scan_results")
+            conn.execute("DELETE FROM scans")
+            try:
+                conn.execute("VACUUM")
+            except sqlite3.OperationalError:
+                # VACUUM requires exclusive lock; ignore if failed
+                pass
+            conn.commit()
+        finally:
+            conn.close()

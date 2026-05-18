@@ -1,4 +1,5 @@
 import time
+import asyncio
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
 from modules.darkweb_scraper import DarkWebScraper, display_results
@@ -84,7 +85,7 @@ class CredentialHunt:
     def __init__(self, tor_handler):
         self.scraper = DarkWebScraper(tor_handler)
 
-    def _run_hunt(self, target: str, category: str, label: str):
+    async def _run_hunt(self, target: str, category: str, label: str):
         dorks = CREDENTIAL_DORKS.get(category, ['"{target}"'])
         all_results = []
 
@@ -106,7 +107,7 @@ class CredentialHunt:
             for dork_template in dorks:
                 dork = dork_template.replace("{target}", target)
                 console.print(f"\n[dim]  Dork: {dork}[/dim]")
-                results = self.scraper.search(target=dork, sources="all")
+                results = await self.scraper.search(target=dork, sources="all")
                 all_results.extend(results)
                 progress.advance(task)
 
@@ -114,26 +115,26 @@ class CredentialHunt:
         display_results(target, label, all_results, elapsed)
         return all_results
 
-    def email_leak(self, target: str):
-        return self._run_hunt(target, "email_leak", "E-posta Sızıntı Taraması")
+    async def email_leak(self, target: str):
+        return await self._run_hunt(target, "email_leak", "E-posta Sızıntı Taraması")
 
-    def user_pass(self, target: str):
-        return self._run_hunt(target, "user_pass", "Kullanıcı:Parola Arama")
+    async def user_pass(self, target: str):
+        return await self._run_hunt(target, "user_pass", "Kullanıcı:Parola Arama")
 
-    def combo_search(self, target: str):
-        return self._run_hunt(target, "combo", "Combo List Taraması")
+    async def combo_search(self, target: str):
+        return await self._run_hunt(target, "combo", "Combo List Taraması")
 
-    def database_dump(self, target: str):
-        return self._run_hunt(target, "database", "Veritabanı Dump Arama")
+    async def database_dump(self, target: str):
+        return await self._run_hunt(target, "database", "Veritabanı Dump Arama")
 
-    def paste_search(self, target: str):
-        return self._run_hunt(target, "paste", "Paste Site Taraması")
+    async def paste_search(self, target: str):
+        return await self._run_hunt(target, "paste", "Paste Site Taraması")
 
-    def hash_search(self, target: str):
-        return self._run_hunt(target, "hash", "Hash Arama")
+    async def hash_search(self, target: str):
+        return await self._run_hunt(target, "hash", "Hash Arama")
 
-    def stealer_search(self, target: str):
-        return self._run_hunt(target, "stealer", "Stealer Log Taraması")
+    async def stealer_search(self, target: str):
+        return await self._run_hunt(target, "stealer", "Stealer Log Taraması")
 
-    def forum_search(self, target: str):
-        return self._run_hunt(target, "forum", "Forum Sızıntı Taraması")
+    async def forum_search(self, target: str):
+        return await self._run_hunt(target, "forum", "Forum Sızıntı Taraması")

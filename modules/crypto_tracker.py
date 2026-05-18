@@ -1,5 +1,6 @@
 import re
 import time
+import asyncio
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
@@ -74,13 +75,13 @@ class CryptoTracker:
             return bool(pattern.match(address))
         return True
 
-    def _check_btc_blockchain(self, address: str):
+    async def _check_btc_blockchain(self, address: str):
         console.print(f"\n[bold magenta][ BLOCKCHAİN API ][/bold magenta]")
         console.print(f"  [dim cyan]→ blockchain.info kontrol ediliyor...[/dim cyan]")
         try:
-            resp = self.tor.get(f"https://blockchain.info/rawaddr/{address}?limit=5", timeout=15)
-            if resp and resp.status_code == 200:
-                data = resp.json()
+            response = await self.tor.get(f"https://blockchain.info/rawaddr/{address}?limit=5", timeout=15)
+            if response and response.status == 200:
+                data = await response.json()
                 balance = data.get("final_balance", 0) / 1e8
                 total_recv = data.get("total_received", 0) / 1e8
                 total_sent = data.get("total_sent", 0) / 1e8
@@ -106,12 +107,12 @@ class CryptoTracker:
         except Exception:
             console.print(f"  [dim yellow]✗ Blockchain API hatası[/dim yellow]")
 
-    def _check_btc_blockcypher(self, address: str):
+    async def _check_btc_blockcypher(self, address: str):
         console.print(f"  [dim cyan]→ blockcypher.com kontrol ediliyor...[/dim cyan]")
         try:
-            resp = self.tor.get(f"https://api.blockcypher.com/v1/btc/main/addrs/{address}/balance", timeout=15)
-            if resp and resp.status_code == 200:
-                data = resp.json()
+            response = await self.tor.get(f"https://api.blockcypher.com/v1/btc/main/addrs/{address}/balance", timeout=15)
+            if response and response.status == 200:
+                data = await response.json()
                 balance = data.get("balance", 0) / 1e8
                 unconfirmed = data.get("unconfirmed_balance", 0) / 1e8
                 n_tx = data.get("n_tx", 0)
@@ -120,7 +121,7 @@ class CryptoTracker:
         except Exception:
             pass
 
-    def _run_search(self, target: str, category: str, label: str, crypto_type: str = ""):
+    async def _run_search(self, target: str, category: str, label: str, crypto_type: str = ""):
         if crypto_type and not self._validate_address(target, crypto_type):
             console.print(f"[bold red][ HATA ] Geçersiz {crypto_type.upper()} adres formatı.[/bold red]")
             return []
@@ -130,11 +131,9 @@ class CryptoTracker:
 
         console.print(f"\n[bold white][ KRİPTO ] {label}: {target[:20]}...{target[-8:]}[/bold white]")
 
-
         if crypto_type == "btc":
-            self._check_btc_blockchain(target)
-            self._check_btc_blockcypher(target)
-
+            await self._check_btc_blockchain(target)
+            await self._check_btc_blockcypher(target)
 
         console.print(f"\n[dim]  {len(dorks)} dork sorgusu taranacak...[/dim]")
         start = time.time()
@@ -153,7 +152,7 @@ class CryptoTracker:
             for dork_template in dorks:
                 dork = dork_template.replace("{target}", target)
                 console.print(f"\n[dim]  Dork: {dork[:60]}...[/dim]")
-                results = self.scraper.search(target=dork, sources="all")
+                results = await self.scraper.search(target=dork, sources="all")
                 all_results.extend(results)
                 progress.advance(task)
 
@@ -161,17 +160,17 @@ class CryptoTracker:
         display_results(target, label, all_results, elapsed)
         return all_results
 
-    def search_btc(self, address: str):
-        return self._run_search(address, "btc", "Bitcoin Adres Arama", "btc")
+    async def search_btc(self, address: str):
+        return await self._run_search(address, "btc", "Bitcoin Adres Arama", "btc")
 
-    def search_eth(self, address: str):
-        return self._run_search(address, "eth", "Ethereum Adres Arama", "eth")
+    async def search_eth(self, address: str):
+        return await self._run_search(address, "eth", "Ethereum Adres Arama", "eth")
 
-    def search_xmr(self, address: str):
-        return self._run_search(address, "xmr", "Monero Adres Arama", "xmr")
+    async def search_xmr(self, address: str):
+        return await self._run_search(address, "xmr", "Monero Adres Arama", "xmr")
 
-    def wallet_association(self, address: str):
-        return self._run_search(address, "wallet_assoc", "Cüzdan İlişki Analizi")
+    async def wallet_association(self, address: str):
+        return await self._run_search(address, "wallet_assoc", "Cüzdan İlişki Analizi")
 
-    def ransomware_check(self, address: str):
-        return self._run_search(address, "ransomware", "Ransomware Cüzdan Kontrolü")
+    async def ransomware_check(self, address: str):
+        return await self._run_search(address, "ransomware", "Ransomware Cüzdan Kontrolü")

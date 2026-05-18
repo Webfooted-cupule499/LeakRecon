@@ -1,8 +1,8 @@
 import re
 import time
 import urllib.parse
+import asyncio
 from dataclasses import dataclass, field
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from bs4 import BeautifulSoup
 from rich.console import Console
 from rich.table import Table
@@ -10,6 +10,9 @@ from rich.text import Text
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
 from rich import box
+from typing import List, Optional, Dict, Any
+
+from config import settings
 
 console = Console()
 
@@ -41,8 +44,8 @@ class ScanResult:
     source_name: str
     source_url: str
     found: bool
-    matched_snippets: list[str] = field(default_factory=list)
-    error: str | None = None
+    matched_snippets: List[str] = field(default_factory=list)
+    error: Optional[str] = None
 
 
 SEARCH_ENGINES = [
@@ -53,7 +56,7 @@ SEARCH_ENGINES = [
         "result_selector": "li.result",
         "link_selector": "a",
         "snippet_selector": "p",
-        "timeout": 25,
+        "timeout": settings.ONION_TIMEOUT,
     },
     {
         "name": "Ahmia (Web)",
@@ -62,34 +65,34 @@ SEARCH_ENGINES = [
         "result_selector": "li.result",
         "link_selector": "a",
         "snippet_selector": "p",
-        "timeout": 15,
+        "timeout": settings.CLEARNET_TIMEOUT,
     },
     {
-        "name": "DuckDuckGo",
-        "base_url": "https://html.duckduckgo.com",
+        "name": "DuckDuckGo (Onion)",
+        "base_url": "https://duckduckgogg42xjoc72x3sjiapcmxgxzulfbgndmvd6z3g34x2w3ad.onion",
         "search_path": "/html/?q={query}",
         "result_selector": "div.result",
         "link_selector": "a.result__a",
         "snippet_selector": "a.result__snippet",
-        "timeout": 15,
+        "timeout": settings.ONION_TIMEOUT,
     },
     {
-        "name": "SearXNG",
-        "base_url": "https://searx.be",
+        "name": "SearXNG (Paulgo)",
+        "base_url": "https://paulgo.io",
         "search_path": "/search?q={query}&categories=general&format=html",
         "result_selector": "article.result",
         "link_selector": "h3 a, a.url_header",
         "snippet_selector": "p.content",
-        "timeout": 15,
+        "timeout": settings.CLEARNET_TIMEOUT,
     },
     {
-        "name": "SearXNG-2",
+        "name": "SearXNG (Sapti)",
         "base_url": "https://search.sapti.me",
         "search_path": "/search?q={query}&categories=general&format=html",
         "result_selector": "article.result",
         "link_selector": "h3 a, a.url_header",
         "snippet_selector": "p.content",
-        "timeout": 15,
+        "timeout": settings.CLEARNET_TIMEOUT,
     },
 ]
 
@@ -101,7 +104,7 @@ PASTE_SITES = [
         "result_selector": "li.result",
         "link_selector": "a",
         "snippet_selector": "p",
-        "timeout": 25,
+        "timeout": settings.ONION_TIMEOUT,
     },
     {
         "name": "Ahmia Paste (Web)",
@@ -110,26 +113,29 @@ PASTE_SITES = [
         "result_selector": "li.result",
         "link_selector": "a",
         "snippet_selector": "p",
-        "timeout": 15,
+        "timeout": settings.CLEARNET_TIMEOUT,
     },
     {
         "name": "SearXNG Paste",
-        "base_url": "https://searx.be",
+        "base_url": "https://paulgo.io",
         "search_path": "/search?q={query}+site%3Apastebin.com+OR+site%3Arentry.co+OR+site%3Apaste.ee&format=html",
         "result_selector": "article.result",
         "link_selector": "h3 a, a.url_header",
         "snippet_selector": "p.content",
-        "timeout": 15,
+        "timeout": settings.CLEARNET_TIMEOUT,
     },
 ]
 
-MAX_PARALLEL_WORKERS = 8
-
 
 class DarkWebScraper:
+    """
+    High-performance, asynchronous Dark Web and Clearnet scraper.
+    Uses aiohttp via TorHandler for concurrent OSINT data gathering.
+    """
 
     def __init__(self, tor_handler):
         self.tor = tor_handler
+        self._semaphore = asyncio.Semaphore(settings.MAX_CONCURRENCY)
 
     def _sanitize_query(self, query: str) -> str:
         return urllib.parse.quote_plus(query.strip())
@@ -147,7 +153,7 @@ class DarkWebScraper:
                 tag.decompose()
         return soup.get_text(separator=" ", strip=True)
 
-    def _extract_context(self, text: str, target: str, window: int = 80) -> str | None:
+    def _extract_context(self, text: str, target: str, window: int = 80) -> Optional[str]:
         if not text:
             return None
         idx = text.lower().find(target.lower())
@@ -159,97 +165,99 @@ class DarkWebScraper:
         snippet = re.sub(r"\s+", " ", snippet)
         return f"...{snippet}..."
 
-    def _search_source(self, source: dict, target: str) -> ScanResult:
+    async def _search_source(self, source: Dict[str, Any], target: str) -> ScanResult:
         name = source["name"]
         encoded = self._sanitize_query(target)
         url = source["base_url"] + source["search_path"].format(query=encoded)
-        timeout = source.get("timeout", 25)
+        timeout = source.get("timeout", settings.ONION_TIMEOUT)
 
         result = ScanResult(source_name=name, source_url=url, found=False)
 
-        if self.tor.is_host_dead(url):
+        if await self.tor.is_host_dead(url):
             result.error = "Atlandı (erişilemez)"
             return result
 
-        try:
-            response = self.tor.get(url, timeout=timeout)
-            if response is None:
-                result.error = "Yanıt alınamadı"
-                return result
-            if response.status_code != 200:
-                result.error = f"HTTP {response.status_code}"
-                return result
+        async with self._semaphore:
+            try:
+                response = await self.tor.get(url, timeout=timeout)
+                if response is None:
+                    result.error = "Yanıt alınamadı veya bağlantı hatası"
+                    return result
+                if response.status != 200:
+                    result.error = f"HTTP {response.status}"
+                    return result
 
-            soup = BeautifulSoup(response.text, "lxml")
-            page_text = soup.get_text(separator=" ", strip=True)
+                html = await response.text()
+                soup = BeautifulSoup(html, "lxml")
+                page_text = soup.get_text(separator=" ", strip=True)
 
-            if self._is_false_positive(page_text):
-                return result
+                if self._is_false_positive(page_text):
+                    return result
 
-            clean_soup = BeautifulSoup(response.text, "lxml")
-            clean_text = self._strip_search_echo(clean_soup, target)
-            target_lower = target.lower()
+                clean_soup = BeautifulSoup(html, "lxml")
+                clean_text = self._strip_search_echo(clean_soup, target)
+                target_lower = target.lower()
 
-            if target_lower not in clean_text.lower():
-                return result
+                if target_lower not in clean_text.lower():
+                    return result
 
-            result_soup = BeautifulSoup(response.text, "lxml")
-            result_elements = result_soup.select(source["result_selector"])
+                result_soup = BeautifulSoup(html, "lxml")
+                result_elements = result_soup.select(source["result_selector"])
 
-            if not result_elements:
-                body_soup = BeautifulSoup(response.text, "lxml")
-                stripped = self._strip_search_echo(body_soup, target)
-                if target_lower in stripped.lower():
-                    context = self._extract_context(stripped, target)
-                    if context and not any(re.search(p, context.lower()) for p in NO_RESULT_PATTERNS):
-                        result.found = True
-                        result.matched_snippets.append(context)
-                return result
-
-            for element in result_elements:
-                element_text = element.get_text(separator=" ", strip=True)
-                if target_lower not in element_text.lower():
-                    continue
-                if element_text.lower().strip() == target_lower:
-                    continue
-                if any(re.search(p, element_text.lower()) for p in NO_RESULT_PATTERNS):
-                    continue
-
-                result.found = True
-                links = element.select(source["link_selector"])
-                for link in links:
-                    href = link.get("href", "")
-                    if href and href.startswith("http"):
-                        result.matched_snippets.append(f"[link] {href}")
-                        break
-
-                snippets = element.select(source["snippet_selector"])
-                for snippet_el in snippets:
-                    snippet_text = snippet_el.get_text(separator=" ", strip=True)
-                    if target_lower in snippet_text.lower():
-                        context = self._extract_context(snippet_text, target)
-                        if context:
+                if not result_elements:
+                    body_soup = BeautifulSoup(html, "lxml")
+                    stripped = self._strip_search_echo(body_soup, target)
+                    if target_lower in stripped.lower():
+                        context = self._extract_context(stripped, target)
+                        if context and not any(re.search(p, context.lower()) for p in NO_RESULT_PATTERNS):
+                            result.found = True
                             result.matched_snippets.append(context)
+                    return result
+
+                for element in result_elements:
+                    element_text = element.get_text(separator=" ", strip=True)
+                    if target_lower not in element_text.lower():
+                        continue
+                    if element_text.lower().strip() == target_lower:
+                        continue
+                    if any(re.search(p, element_text.lower()) for p in NO_RESULT_PATTERNS):
+                        continue
+
+                    result.found = True
+                    links = element.select(source["link_selector"])
+                    for link in links:
+                        href = link.get("href", "")
+                        if href and href.startswith("http"):
+                            result.matched_snippets.append(f"[link] {href}")
                             break
 
-                if not result.matched_snippets:
-                    context = self._extract_context(element_text, target)
-                    if context:
-                        result.matched_snippets.append(context)
+                    snippets = element.select(source["snippet_selector"])
+                    for snippet_el in snippets:
+                        snippet_text = snippet_el.get_text(separator=" ", strip=True)
+                        if target_lower in snippet_text.lower():
+                            context = self._extract_context(snippet_text, target)
+                            if context:
+                                result.matched_snippets.append(context)
+                                break
 
-            return result
-        except Exception as e:
-            result.error = str(e)
-            return result
+                    if not result.matched_snippets:
+                        context = self._extract_context(element_text, target)
+                        if context:
+                            result.matched_snippets.append(context)
 
-    def _search_parallel(self, sources: list[dict], target: str, category_label: str) -> list[ScanResult]:
+                return result
+            except Exception as e:
+                result.error = f"İşlem hatası: {str(e)}"
+                return result
+
+    async def _search_parallel(self, sources: List[Dict[str, Any]], target: str, category_label: str) -> List[ScanResult]:
         results = []
         live_sources = []
         skipped_sources = []
 
         for src in sources:
             url = src["base_url"] + src["search_path"].format(query=self._sanitize_query(target))
-            if self.tor.is_host_dead(url):
+            if await self.tor.is_host_dead(url):
                 skipped_sources.append(src)
                 results.append(ScanResult(
                     source_name=src["name"], source_url=url, found=False,
@@ -265,6 +273,8 @@ class DarkWebScraper:
         if not live_sources:
             return results
 
+        tasks = [self._search_source(src, target) for src in live_sources]
+
         with Progress(
             SpinnerColumn("dots"),
             TextColumn("[bold cyan]{task.description}"),
@@ -273,42 +283,26 @@ class DarkWebScraper:
             TimeElapsedColumn(),
             console=console, transient=True,
         ) as progress:
-            task = progress.add_task(f"  {category_label}", total=len(live_sources))
+            task_id = progress.add_task(f"  {category_label}", total=len(live_sources))
 
-            with ThreadPoolExecutor(max_workers=min(MAX_PARALLEL_WORKERS, len(live_sources))) as pool:
-                futures = {pool.submit(self._search_source, src, target): src for src in live_sources}
-
-                completed_futures = set()
+            # Executing tasks asynchronously while updating progress
+            for completed_task in asyncio.as_completed(tasks):
                 try:
-                    for future in as_completed(futures, timeout=45):
-                        completed_futures.add(future)
-                        src = futures[future]
-                        try:
-                            result = future.result(timeout=5)
-                            results.append(result)
-                            if result.found:
-                                console.print(f"  [bold red]● {src['name']}: TESPİT EDİLDİ[/bold red]")
-                            elif result.error:
-                                console.print(f"  [dim yellow]✗ {src['name']}: {result.error}[/dim yellow]")
-                            else:
-                                console.print(f"  [dim green]✓ {src['name']}: Temiz[/dim green]")
-                        except Exception as e:
-                            results.append(ScanResult(source_name=src["name"], source_url="", found=False, error=f"İşlem hatası: {e}"))
-                            console.print(f"  [dim yellow]✗ {src['name']}: İşlem hatası[/dim yellow]")
-                        progress.advance(task)
-
-                except TimeoutError:
-                    for future, src in futures.items():
-                        if future not in completed_futures:
-                            future.cancel()
-                            self.tor._record_failure(src["base_url"] + src["search_path"].format(query="x"))
-                            results.append(ScanResult(source_name=src["name"], source_url="", found=False, error="Zaman aşımı (atlandı)"))
-                            console.print(f"  [dim yellow]⏱ {src['name']}: Zaman aşımı[/dim yellow]")
-                            progress.advance(task)
+                    result = await completed_task
+                    results.append(result)
+                    if result.found:
+                        console.print(f"  [bold red]● {result.source_name}: TESPİT EDİLDİ[/bold red]")
+                    elif result.error:
+                        console.print(f"  [dim yellow]✗ {result.source_name}: {result.error}[/dim yellow]")
+                    else:
+                        console.print(f"  [dim green]✓ {result.source_name}: Temiz[/dim green]")
+                except Exception as e:
+                    console.print(f"  [dim yellow]✗ Görev Hatası: {e}[/dim yellow]")
+                progress.advance(task_id)
 
         return results
 
-    def search(self, target: str, dork: str = "", sources: str = "all") -> list[ScanResult]:
+    async def search(self, target: str, dork: str = "", sources: str = "all") -> List[ScanResult]:
         query = f"{dork} {target}".strip() if dork else target
         all_results = []
 
@@ -317,20 +311,22 @@ class DarkWebScraper:
 
         if engines:
             console.print(f"\n[bold magenta][ ARAMA MOTORLARI ][/bold magenta]")
-            all_results.extend(self._search_parallel(engines, query, "Arama Motorları"))
+            res = await self._search_parallel(engines, query, "Arama Motorları")
+            all_results.extend(res)
 
         if pastes:
             console.print(f"\n[bold magenta][ PASTE / FORUM SİTELERİ ][/bold magenta]")
-            all_results.extend(self._search_parallel(pastes, query, "Paste Siteleri"))
+            res = await self._search_parallel(pastes, query, "Paste Siteleri")
+            all_results.extend(res)
 
         return all_results
 
-    def scan_all(self, target: str, target_type: str = "") -> list[ScanResult]:
-        return self.search(target)
+    async def scan_all(self, target: str, target_type: str = "") -> List[ScanResult]:
+        return await self.search(target)
 
 
-def _consolidate_results(results: list[ScanResult]) -> list[ScanResult]:
-    source_map: dict[str, ScanResult] = {}
+def _consolidate_results(results: List[ScanResult]) -> List[ScanResult]:
+    source_map: Dict[str, ScanResult] = {}
     for r in results:
         name = r.source_name
         if name not in source_map:
@@ -354,7 +350,7 @@ def _consolidate_results(results: list[ScanResult]) -> list[ScanResult]:
     return list(source_map.values())
 
 
-def display_results(target: str, label: str, results: list[ScanResult], elapsed: float):
+def display_results(target: str, label: str, results: List[ScanResult], elapsed: float):
     console.print("\n")
     consolidated = _consolidate_results(results)
 
@@ -423,7 +419,6 @@ def display_results(target: str, label: str, results: list[ScanResult], elapsed:
         parts.append(f"[dim]Erişilemedi: {len(skipped_results)}[/dim]")
     console.print(Panel(" │ ".join(parts), title="[bold]ÖZET[/bold]", border_style="bright_black", box=box.ROUNDED))
     console.print()
-
 
     try:
         from core import database as scan_db

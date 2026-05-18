@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  # Tor Proxy Service for anonymized routing
+  torproxy:
+    image: dperson/torproxy
+    container_name: leakrecon_tor
+    environment:
+      # Optional: configure specific Tor exit nodes or settings if required
+      - TOR_EXTRA_ARGS=--SocksPort 0.0.0.0:9050
+    ports:
+      - "9050:9050"
+    restart: unless-stopped
+    networks:
+      - leakrecon_net
+
+  # LeakRecon Core Application
+  leakrecon:
+    build: .
+    container_name: leakrecon_app
+    depends_on:
+      - torproxy
+    env_file:
+      - .env  # Reads from .env; fallback to .env.example if not present
+    environment:
+      # Override the host to point to the docker container service name
+      - TOR_PROXY_HOST=torproxy
+      - TOR_PROXY_PORT=9050
+    volumes:
+      # Persist local data (e.g., SQLite databases, generated PDF reports)
+      - ./data:/app/data
+    stdin_open: true # Support interactive terminal (if running main.py interactively)
+    tty: true        # Allocate a pseudo-TTY
+    networks:
+      - leakrecon_net
+
+networks:
+  leakrecon_net:
+    driver: bridge

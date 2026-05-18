@@ -2,6 +2,7 @@ import sys
 import os
 import json
 import time
+import asyncio
 import platform
 import socket
 from datetime import datetime
@@ -10,6 +11,8 @@ from datetime import datetime
 if os.name == "nt":
     os.system("chcp 65001 > nul 2>&1")
     sys.stdout.reconfigure(encoding="utf-8")
+    # Fix connection reset errors and _ProactorBasePipeTransport warnings
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 from rich.console import Console
 from rich.panel import Panel
@@ -59,9 +62,7 @@ def process_choice(choice: str, menu_key: str) -> str | None:
     return None
 
 
-
-
-def menu_darkweb(scraper: DarkWebScraper):
+async def menu_darkweb(scraper: DarkWebScraper):
     while True:
         show_screen("darkweb")
         choice = get_input("darkweb")
@@ -89,7 +90,7 @@ def menu_darkweb(scraper: DarkWebScraper):
                 for t in targets:
                     console.print(f"\n  [bold white]━━━ Hedef: {t} ━━━[/bold white]")
                     start = time.time()
-                    results = scraper.scan_all(t)
+                    results = await scraper.scan_all(t)
                     display_results(t, "Çoklu Tarama", results, time.time() - start)
                     log_scan("Çoklu Tarama", t)
             wait_enter()
@@ -100,7 +101,7 @@ def menu_darkweb(scraper: DarkWebScraper):
             target = ask_target(prompt_text)
             if target:
                 start = time.time()
-                results = scraper.scan_all(target)
+                results = await scraper.scan_all(target)
                 display_results(target, label, results, time.time() - start)
                 log_scan(label, target)
             wait_enter()
@@ -109,9 +110,7 @@ def menu_darkweb(scraper: DarkWebScraper):
             time.sleep(1.5)
 
 
-
-
-def menu_identity(identity: IdentityRecon):
+async def menu_identity(identity: IdentityRecon):
     while True:
         show_screen("identity")
         choice = get_input("identity")
@@ -137,7 +136,7 @@ def menu_identity(identity: IdentityRecon):
             prompt_text, func, label = actions[choice]
             target = ask_target(prompt_text)
             if target:
-                func(target)
+                await func(target)
                 log_scan(label, target)
             wait_enter()
         else:
@@ -145,9 +144,7 @@ def menu_identity(identity: IdentityRecon):
             time.sleep(1.5)
 
 
-
-
-def menu_network(network: NetworkIntel):
+async def menu_network(network: NetworkIntel):
     while True:
         show_screen("network")
         choice = get_input("network")
@@ -161,14 +158,14 @@ def menu_network(network: NetworkIntel):
         if choice == "1":
             target = ask_target("IP adresi girin")
             if target:
-                network.ip_geolocation(target)
+                await network.ip_geolocation(target)
                 log_scan("IP Geolocation", target)
             wait_enter()
 
         elif choice == "2":
             target = ask_target("IP adresi girin")
             if target:
-                network.reverse_dns(target)
+                await network.reverse_dns(target)
                 log_scan("Reverse DNS", target)
             wait_enter()
 
@@ -184,35 +181,35 @@ def menu_network(network: NetworkIntel):
                         print_error("Geçersiz port formatı. Sayıları virgülle ayırın.")
                         wait_enter()
                         continue
-                network.port_scan(target, ports)
+                await network.port_scan(target, ports)
                 log_scan("Port Tarama", target)
             wait_enter()
 
         elif choice == "4":
             target = ask_target("IP adresi girin")
             if target:
-                network.tor_exit_check(target)
+                await network.tor_exit_check(target)
                 log_scan("Tor Exit Check", target)
             wait_enter()
 
         elif choice == "5":
             target = ask_target("IP adresi girin")
             if target:
-                network.ip_reputation(target)
+                await network.ip_reputation(target)
                 log_scan("IP İtibar", target)
             wait_enter()
 
         elif choice == "6":
             target = ask_target("URL girin (http:// veya https://)")
             if target:
-                network.fetch_headers(target)
+                await network.fetch_headers(target)
                 log_scan("HTTP Header", target)
             wait_enter()
 
         elif choice == "7":
             target = ask_target("IP veya domain girin")
             if target:
-                network.whois_lookup(target)
+                await network.whois_lookup(target)
                 log_scan("WHOIS", target)
             wait_enter()
 
@@ -235,15 +232,15 @@ def menu_network(network: NetworkIntel):
                         except socket.gaierror:
                             pass
 
-                    resp = network.tor.get(f"https://dns.google/resolve?name={target}&type=MX", timeout=15)
-                    if resp and resp.status_code == 200:
-                        data = resp.json()
+                    resp = await network.tor.get(f"https://dns.google/resolve?name={target}&type=MX", timeout=15)
+                    if resp and resp.status == 200:
+                        data = await resp.json()
                         for answer in data.get("Answer", []):
                             records.append(("MX" if answer.get("type") == 15 else "DNS", answer.get("data", "?")))
 
-                    resp = network.tor.get(f"https://dns.google/resolve?name={target}&type=NS", timeout=15)
-                    if resp and resp.status_code == 200:
-                        data = resp.json()
+                    resp = await network.tor.get(f"https://dns.google/resolve?name={target}&type=NS", timeout=15)
+                    if resp and resp.status == 200:
+                        data = await resp.json()
                         for answer in data.get("Answer", []):
                             records.append(("NS", answer.get("data", "?")))
 
@@ -292,8 +289,8 @@ def menu_network(network: NetworkIntel):
                     for idx, ip in enumerate(hosts, 1):
                         ip_str = str(ip)
                         console.print(f"    [dim]→ {ip_str}[/dim]", end="")
-                        p80 = network._socks5_connect(ip_str, 80, timeout=5)
-                        p443 = network._socks5_connect(ip_str, 443, timeout=5)
+                        p80 = await network._socks5_connect(ip_str, 80, timeout=5)
+                        p443 = await network._socks5_connect(ip_str, 443, timeout=5)
                         s80 = "[green]AÇIK[/green]" if p80 else "[dim]kapalı[/dim]"
                         s443 = "[green]AÇIK[/green]" if p443 else "[dim]kapalı[/dim]"
                         table.add_row(str(idx), ip_str, s80, s443)
@@ -313,9 +310,7 @@ def menu_network(network: NetworkIntel):
             time.sleep(1.5)
 
 
-
-
-def menu_onion(onion: OnionScanner):
+async def menu_onion(onion: OnionScanner):
     while True:
         show_screen("onion")
         choice = get_input("onion")
@@ -339,14 +334,14 @@ def menu_onion(onion: OnionScanner):
             method_name, prompt_text = actions[choice]
             target = ask_target(prompt_text)
             if target:
-                getattr(onion, method_name)(target)
+                await getattr(onion, method_name)(target)
                 log_scan(method_name, target)
             wait_enter()
 
         elif choice == "5":
             target = ask_target("Onion listesi dosya yolu girin")
             if target:
-                onion.bulk_scan(target)
+                await onion.bulk_scan(target)
                 log_scan("Toplu Onion", target)
             wait_enter()
 
@@ -354,7 +349,7 @@ def menu_onion(onion: OnionScanner):
             target = ask_target(".onion adresi girin")
             if target:
                 out = ask_optional("Çıktı dosya adı (boş = otomatik)")
-                onion.download_page(target, out or "")
+                await onion.download_page(target, out or "")
                 log_scan("Onion İndir", target)
             wait_enter()
 
@@ -363,9 +358,7 @@ def menu_onion(onion: OnionScanner):
             time.sleep(1.5)
 
 
-
-
-def menu_credential(cred: CredentialHunt):
+async def menu_credential(cred: CredentialHunt):
     while True:
         show_screen("credential")
         choice = get_input("credential")
@@ -398,14 +391,14 @@ def menu_credential(cred: CredentialHunt):
                     console.print(f"\n  [bold white]{len(emails)} e-posta taranacak...[/bold white]")
                     for idx, email in enumerate(emails, 1):
                         console.print(f"\n  [bold]━━━ [{idx}/{len(emails)}] {email} ━━━[/bold]")
-                        cred.email_leak(email)
+                        await cred.email_leak(email)
                         log_scan("Toplu E-posta Leak", email)
             wait_enter()
 
         elif choice == "10":
             domain = ask_target("Domain girin (ör: example.com)")
             if domain:
-                cred.email_leak(f"@{domain}")
+                await cred.email_leak(f"@{domain}")
                 log_scan("Wildcard Domain", domain)
             wait_enter()
 
@@ -413,7 +406,7 @@ def menu_credential(cred: CredentialHunt):
             method_name, prompt_text, label = actions[choice]
             target = ask_target(prompt_text)
             if target:
-                getattr(cred, method_name)(target)
+                await getattr(cred, method_name)(target)
                 log_scan(label, target)
             wait_enter()
 
@@ -422,9 +415,7 @@ def menu_credential(cred: CredentialHunt):
             time.sleep(1.5)
 
 
-
-
-def menu_crypto(crypto: CryptoTracker):
+async def menu_crypto(crypto: CryptoTracker):
     while True:
         show_screen("crypto")
         choice = get_input("crypto")
@@ -448,7 +439,7 @@ def menu_crypto(crypto: CryptoTracker):
             method_name, prompt_text, label = actions[choice]
             target = ask_target(prompt_text)
             if target:
-                getattr(crypto, method_name)(target)
+                await getattr(crypto, method_name)(target)
                 log_scan(label, target)
             wait_enter()
         else:
@@ -456,9 +447,7 @@ def menu_crypto(crypto: CryptoTracker):
             time.sleep(1.5)
 
 
-
-
-def menu_tools(tor: TorHandler):
+async def menu_tools(tor: TorHandler):
     from core import database as scan_db
     from core import reporter
 
@@ -474,12 +463,10 @@ def menu_tools(tor: TorHandler):
 
         if choice == "1":
             console.print("  [dim]Durum kontrol ediliyor...[/dim]", end="\r")
-            if tor.check_connection() and tor.active_proxy:
-                proxy = tor.active_proxy.get("http", "?")
+            if tor.session and tor.tor_ip:
                 console.print(Panel(
                     f"  [bold green]● Tor Bağlantısı Aktif[/bold green]\n\n"
-                    f"  [white]Proxy:[/white]      {proxy}\n"
-                    f"  [white]Çıkış IP:[/white]   {tor.tor_ip or '?'}\n"
+                    f"  [white]Çıkış IP:[/white]   {tor.tor_ip}\n"
                     f"  [white]Oturum:[/white]     Açık",
                     title="[bold cyan]TOR DURUMU[/bold cyan]",
                     border_style="green", box=box.ROUNDED,
@@ -493,30 +480,14 @@ def menu_tools(tor: TorHandler):
             wait_enter()
 
         elif choice == "2":
-            console.print("\n  [bold cyan][ TOR ] Yeni kimlik alınıyor...[/bold cyan]")
-            try:
-                from stem import Signal
-                from stem.control import Controller
-                control_port = 9051 if "9050" in str(tor.active_proxy) else 9151
-                with Controller.from_port(port=control_port) as controller:
-                    controller.authenticate()
-                    controller.signal(Signal.NEWNYM)
-                    print_success("Tor devresi yenilendi.")
-                    time.sleep(3)
-                    resp = tor.get("https://check.torproject.org/api/ip", timeout=15)
-                    if resp:
-                        new_ip = resp.json().get("IP", "?")
-                        tor.tor_ip = new_ip
-                        console.print(f"    [bold green]Yeni IP: {new_ip}[/bold green]")
-            except ImportError:
-                print_warning("'stem' kütüphanesi gerekli: pip install stem")
-            except Exception as e:
-                print_error(f"Devre yenilemesi başarısız: {e}")
+            # Tor IP Yenileme genelde telnet/SOCKS auth uzerinden yapilir. 
+            # Eger root erişimi yoksa çalışmayabilir. Sadece bilgi mesaji verildi.
+            console.print("\n  [bold cyan][ TOR ] Docker tabanlı kurulumda IP yenileme için container'ı yeniden başlatın.[/bold cyan]")
             wait_enter()
 
         elif choice == "3":
             console.print("\n  [bold cyan][ TEST ] Proxy test ediliyor...[/bold cyan]")
-            tor.verify_tor_connection()
+            await tor.verify_tor_connection()
             wait_enter()
 
         elif choice == "4":
@@ -691,7 +662,6 @@ def menu_tools(tor: TorHandler):
             table.add_row("Python", platform.python_version())
             table.add_row("İşlemci", platform.processor() or "?")
             table.add_row("Hostname", platform.node())
-            table.add_row("Tor Proxy", tor.active_proxy.get("http", "?") if tor.active_proxy else "Yok")
             table.add_row("Tor IP", tor.tor_ip or "?")
 
             stats = scan_db.get_stats()
@@ -702,89 +672,94 @@ def menu_tools(tor: TorHandler):
             console.print(table)
             wait_enter()
 
+        elif choice == "13":
+            # PDF Rapor oluşturma eklemesi
+            try:
+                path = reporter.export_pdf()
+                print_success(f"PDF rapor oluşturuldu: {path}")
+            except AttributeError:
+                print_error("PDF export fonksiyonu reporter modülünde henüz mevcut değil.")
+            except Exception as e:
+                print_error(f"PDF raporlanırken hata: {e}")
+            wait_enter()
+
         else:
             print_error("Geçersiz seçim.")
             time.sleep(1.5)
 
 
-
-
-def main():
-    global tor_instance
-
+async def main():
     clear_screen()
     print_banner()
     console.print()
 
     tor = TorHandler()
-    if not tor.verify_tor_connection():
-        console.print("\n  [bold red]Tor servisi bulunamadı. Program sonlandırılıyor.[/bold red]\n")
-        sys.exit(1)
+    
+    try:
+        if not await tor.verify_tor_connection():
+            console.print("\n  [bold red]Tor servisi bulunamadı. Program sonlandırılıyor.[/bold red]\n")
+            return
 
-    tor_instance = tor
+        from core import database as scan_db
+        scan_db.init_db()
 
+        scraper = DarkWebScraper(tor)
+        identity = IdentityRecon(tor)
+        network = NetworkIntel(tor)
+        onion = OnionScanner(tor)
+        cred = CredentialHunt(tor)
+        crypto = CryptoTracker(tor)
 
-    from core import database as scan_db
-    scan_db.init_db()
+        print_success("LeakRecon asenkron motoru hazır.")
+        time.sleep(1)
 
-    scraper = DarkWebScraper(tor)
-    identity = IdentityRecon(tor)
-    network = NetworkIntel(tor)
-    onion = OnionScanner(tor)
-    cred = CredentialHunt(tor)
-    crypto = CryptoTracker(tor)
+        while True:
+            show_screen("main")
+            choice = get_input("leakrecon")
 
-    print_success("LeakRecon hazır.")
-    time.sleep(1)
+            glob = is_global_command(choice)
+            if glob == "exit":
+                handle_global("exit", tor)
+                break
+            elif glob == "back" or glob == "home":
+                continue
+            elif glob:
+                handle_global(glob, tor)
+                wait_enter()
+                continue
 
-    while True:
-        show_screen("main")
-        choice = get_input("leakrecon")
+            routes = {
+                "1": lambda: menu_darkweb(scraper),
+                "2": lambda: menu_identity(identity),
+                "3": lambda: menu_network(network),
+                "4": lambda: menu_onion(onion),
+                "5": lambda: menu_credential(cred),
+                "6": lambda: menu_crypto(crypto),
+                "7": lambda: menu_tools(tor),
+            }
 
-        glob = is_global_command(choice)
-        if glob == "exit":
-            handle_global("exit", tor)
-        elif glob == "back" or glob == "home":
-            continue
-        elif glob:
-            handle_global(glob, tor)
-            wait_enter()
-            continue
-
-        routes = {
-            "1": lambda: menu_darkweb(scraper),
-            "2": lambda: menu_identity(identity),
-            "3": lambda: menu_network(network),
-            "4": lambda: menu_onion(onion),
-            "5": lambda: menu_credential(cred),
-            "6": lambda: menu_crypto(crypto),
-            "7": lambda: menu_tools(tor),
-        }
-
-        if choice in routes:
-            try:
-                routes[choice]()
-            except KeyboardInterrupt:
-                console.print("\n  [bold yellow]İşlem iptal edildi (Ctrl+C). Ana menüye dönülüyor...[/bold yellow]")
-                time.sleep(1)
-            except Exception as e:
-                print_error(f"Beklenmeyen bir hata oluştu: {e}")
-                time.sleep(2)
-        else:
-            print_error("Geçersiz seçim. Numara girin veya 'help' yazın.")
-            time.sleep(1.5)
+            if choice in routes:
+                try:
+                    await routes[choice]()
+                except KeyboardInterrupt:
+                    console.print("\n  [bold yellow]İşlem iptal edildi (Ctrl+C). Ana menüye dönülüyor...[/bold yellow]")
+                    time.sleep(1)
+                except Exception as e:
+                    print_error(f"Beklenmeyen bir hata oluştu: {e}")
+                    time.sleep(2)
+            else:
+                print_error("Geçersiz seçim. Numara girin veya 'help' yazın.")
+                time.sleep(1.5)
+    finally:
+        await tor.close()
 
 
 if __name__ == "__main__":
     try:
-        main()
+        asyncio.run(main())
     except KeyboardInterrupt:
         console.print("\n\n  [bold yellow]Oturum sonlandırıldı (Ctrl+C).[/bold yellow]")
-        if tor_instance:
-            tor_instance.close()
         sys.exit(0)
     except Exception as e:
         console.print(f"\n\n  [bold red]Kritik hata: {e}[/bold red]")
-        if tor_instance:
-            tor_instance.close()
         sys.exit(1)

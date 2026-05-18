@@ -1,131 +1,182 @@
 <div align="center">
-
-```text
-  ██╗     ███████╗ █████╗ ██╗  ██╗██████╗ ███████╗ ██████╗ ██████╗ ███╗   ██╗
-  ██║     ██╔════╝██╔══██╗██║ ██╔╝██╔══██╗██╔════╝██╔════╝██╔═══██╗████╗  ██║
-  ██║     █████╗  ███████║█████╔╝ ██████╔╝█████╗  ██║     ██║   ██║██╔██╗ ██║
-  ██║     ██╔══╝  ██╔══██║██╔═██╗ ██╔══██╗██╔══╝  ██║     ██║   ██║██║╚██╗██║
-  ███████╗███████╗██║  ██║██║  ██╗██║  ██║███████╗╚██████╗╚██████╔╝██║ ╚████║
-  ╚══════╝╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝
-```
-
-**Dark Web Leak Intelligence & OSINT Reconnaissance Framework**
-
-LeakRecon is a modular, high-performance, pure-Python cybersecurity framework designed for deep OSINT and leak intelligence gathering exclusively over the Tor network. It provides automated reconnaissance capabilities without relying on external clearnet APIs that could compromise operational security.
+  <img src="img/leak.png" alt="LeakRecon Banner" width="800">
+  
+  # LeakRecon
+  **High-Performance Asynchronous OSINT & Dark Web Intelligence Framework**
+  
+  [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+  [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+  [![Asyncio](https://img.shields.io/badge/asyncio-supported-brightgreen.svg)](https://docs.python.org/3/library/asyncio.html)
+  [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://www.docker.com/)
 
 </div>
 
 ---
 
-## 🛡️ Core Philosophy: 100% Tor-Routed
+## 📌 Overview
 
-Operational security is the foundation of LeakRecon. **No requests are made over the clearnet.** Every DNS resolution, API call, scraper request, and ping is forcefully routed through a local Tor SOCKS5 proxy. This ensures complete anonymity and prevents accidental leakage of target information to third-party endpoints. 
+**LeakRecon** is an enterprise-grade, highly scalable asynchronous OSINT (Open Source Intelligence) framework. Designed for security professionals, penetration testers, and threat analysts, LeakRecon automates deep investigations across the Surface Web and the Dark Web. By leveraging modern Python capabilities (`asyncio`, `aiohttp`) over a secure SOCKS5 Tor proxy circuit, the framework executes massive distributed queries without sacrificing anonymity.
 
-## ⚡ Features & Capabilities
+From tracking cryptocurrency transactions related to ransomware to uncovering compromised credentials and charting identity footprints, LeakRecon centralizes advanced reconnaissance into a unified, visually stunning CLI interface.
 
-LeakRecon is divided into several powerful modules, all accessible through a seamless interactive CLI framework:
-
-### 1. 🌐 Dark Web Search Engine Scraper
-A multi-threaded scraper engine that queries top Onion search engines simultaneously.
-- Search by email, username, phone number, IP, domain, or raw dorks.
-- Bulk scanning support via text files.
-- Automatically handles Tor captchas and timeouts.
-
-### 2. 👤 Identity Intelligence (OSINT)
-Correlate human targets with data breaches and digital footprints.
-- **E-Mail OSINT**: Scrape paste sites and databases for email associations.
-- **Username Profiling**: Track threat actor aliases across underground forums.
-- **Phone Number Tracing**: Identify leaked records tied to cellular numbers.
-- **Hash Lookup**: Reverse lookup MD5/SHA-256 hashes against dark web rainbow tables.
-
-### 3. 🔌 Network Forensics
-Investigate infrastructure without touching it directly from your real IP.
-- **Tor-Routed Port Scanner**: Scan targets entirely over the Tor network using custom socket proxies.
-- **DNS & Reverse DNS**: Resolve A/AAAA/MX/TXT records anonymously.
-- **IP Reputation**: Check if an IP belongs to a botnet, C2 server, or Tor Exit Node.
-- **Subnet Scanning**: Scan an entire CIDR block for live hosts and common web ports (80/443).
-
-### 4. 🧅 Deep Onion Scanner
-Analyze hidden services dynamically.
-- **Accessibility Checks**: Verify if a `.onion` service is alive.
-- **Technology Fingerprinting**: Detect the underlying CMS, server, and JS libraries running behind the onion.
-- **Link Extraction**: Crawl and extract all internal/external links from a hidden service.
-- **Source Downloading**: Download the raw HTML of any onion site securely.
-
-### 5. 🔑 Credential Hunting
-Actively hunt for exposed data.
-- **Stealer Logs**: Search for Redline, Raccoon, and Vidar stealer dumps.
-- **Database Leaks**: Hunt for `.sql` dumps and compromised database schemas.
-- **Combo Lists**: Search for `user:pass` and `email:pass` distributions.
-
-### 6. ₿ Crypto & Blockchain Tracking
-Investigate cryptocurrency addresses for illicit activities.
-- **Wallet Association**: Map Bitcoin (BTC), Ethereum (ETH), and Monero (XMR) addresses to known darknet markets.
-- **Ransomware Tracking**: Check addresses against known ransomware syndicates.
-- **Mixer/Tumbler Detection**: Identify if funds are being obfuscated through coin mixers.
-
-### 7. 📊 Reporting & Database
-All scans are automatically saved.
-- **SQLite Storage**: Everything is preserved in a local `.db` file.
-- **Diff Analysis**: Compare a new scan with a previous scan of the same target to find *new* leaks.
-- **Exporting**: Generate beautiful HTML dashboards, JSON APIs, or CSV files of your findings.
+![LeakRecon Menu Interface](img/cmd.png)
 
 ---
 
-## 🚀 Installation
+## 🚀 Core Architecture & Features
 
-### Prerequisites
-- **Python 3.10+**
-- **Tor Service**: Tor must be installed and running in the background.
+LeakRecon has been entirely rewritten to transition from a legacy synchronous threaded model to a pure, non-blocking asynchronous event loop architecture.
 
-#### Setting up Tor (Linux / Kali / Ubuntu)
+### 🛡️ Strict Anonymity (Zero-Leak Proxy)
+All outbound network operations are rigorously routed through the Tor network. LeakRecon employs internal circuit-breaker mechanisms and dynamic Tor identity refreshing. If the Tor proxy fails, the engine instantly halts execution to prevent accidental IP leaks. 
+
+### ⚡ High-Performance Concurrency
+Powered by `aiohttp` and `asyncio.Semaphore`, the framework executes bulk dorking, port scanning, and API scraping concurrently. This drastically reduces execution times during large-scale footprinting operations, effectively utilizing maximum requests-per-second (RPS) limits without triggering rate-limits.
+
+### 🗄️ Professional Database & Reporting Engine
+LeakRecon persists all scan findings locally via a thread-safe SQLite backend. It provides advanced historical tracking, chronological scan diffing (to monitor targets over time), and exporting capabilities. Generate high-quality intelligence reports in multiple formats:
+- **HTML:** Interactive, dark-themed reports suitable for executive delivery.
+- **PDF:** Polished, static document formats powered by `pdfkit` and `wkhtmltopdf`.
+- **JSON/CSV:** Raw data exports for SIEM and custom data pipeline integrations.
+
+![LeakRecon Results View](img/result.png)
+
+---
+
+## 🧩 Reconnaissance Modules
+
+LeakRecon operates through several highly specialized modules, each focused on a unique vector of intelligence:
+
+1. **Dark Web Scraper (`modules/darkweb_scraper.py`)**
+   - Conducts concurrent dork searches across deep web repositories, paste sites, and Tor-native search engines (e.g., Ahmia, Onion DuckDuckGo).
+   - Utilizes advanced false-positive detection algorithms to extract precise target snippets.
+
+2. **Identity Profiling (`modules/identity_recon.py`)**
+   - Scans massive datasets for compromised emails, usernames, and physical addresses.
+   - Extracts associated hashes and cross-references them against known breaches.
+
+3. **Network Intelligence (`modules/network_intel.py`)**
+   - Conducts asynchronous subnet tracking and asynchronous TCP SOCKS5 port enumeration over Tor.
+   - Executes DNS, WHOIS, and IP reputation analytics without directly touching the target.
+
+4. **Onion Surface Analyzer (`modules/onion_scanner.py`)**
+   - Analyzes bulk `.onion` endpoints for live status, extracts hidden metadata, and performs deep technological fingerprinting.
+   - Downloads and isolates `.onion` site resources safely.
+
+5. **Credential Hunting (`modules/credential_hunt.py`)**
+   - Hunts for specific user/password combinations across Stealer Logs, combolists, and pastebins.
+
+6. **Crypto Tracker (`modules/crypto_tracker.py`)**
+   - Maps blockchain forensics for Bitcoin, Ethereum, and Monero.
+   - Correlates wallets to known illicit activities, ransomware variants, and mixer/tumbler services.
+
+---
+
+## 🛠️ Installation & Deployment
+
+LeakRecon provides two seamless deployment strategies. Docker is highly recommended to guarantee absolute network isolation and zero-dependency friction.
+
+### Method 1: Docker Compose (Recommended)
+
+Requires [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/).
+
 ```bash
-sudo apt update
-sudo apt install tor
-sudo systemctl enable tor
-sudo systemctl start tor
-```
-
-#### Setting up Tor (Windows / macOS)
-The easiest way is to download and run the [Tor Browser](https://www.torproject.org/download/). Keep it open in the background, and LeakRecon will automatically hook into its proxy port (9150).
-
-### Installing LeakRecon
-
-1. Clone the repository:
-```bash
-git clone https://github.com/yourusername/LeakRecon.git
+# 1. Clone the repository
+git clone https://github.com/egnake/LeakRecon.git
 cd LeakRecon
+
+# 2. Setup the environment configuration
+cp .env.example .env
+
+# 3. Build the isolated Tor proxy and App containers
+docker-compose up -d --build
+
+# 4. Attach to the interactive console
+docker exec -it leakrecon_app python main.py
 ```
 
-2. Install dependencies:
+### Method 2: Local Python Environment
+
+Requires Python 3.10+ and an active local Tor proxy service.
+
 ```bash
+# 1. Clone the repository
+git clone https://github.com/egnake/LeakRecon.git
+cd LeakRecon
+
+# 2. Create and activate a virtual environment
+python3 -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# 3. Install required async dependencies
 pip install -r requirements.txt
+
+# 4. Setup configuration
+cp .env.example .env
 ```
 
----
+**⚠️ Important Requirement for PDF Reports:**
+If you intend to generate PDF reports locally, you must install `wkhtmltopdf` on your host machine:
+- **Debian/Ubuntu:** `sudo apt install wkhtmltopdf`
+- **macOS:** `brew install homebrew/cask/wkhtmltopdf`
+- **Windows:** Download from the [wkhtmltopdf website](https://wkhtmltopdf.org/) and add it to your system PATH.
 
-## 🎯 Usage
-
-Start the interactive CLI:
+**Start the Framework:**
+Ensure your Tor daemon or Tor Browser is running (Ports `9050` or `9150`), check the `.env` settings, and run:
 ```bash
 python main.py
 ```
 
-### Global Commands
-You can type these at **any** prompt to control the framework:
-- `help` / `h`: Show the global help menu.
-- `back` / `b`: Return to the previous menu.
-- `home`: Return to the main menu.
-- `clear` / `cls`: Clear the terminal screen.
-- `status`: Check real-time Tor connectivity and IP.
-- `exit` / `q`: Safely close the application and destroy Tor sessions.
+---
+
+## ⚙️ Configuration (`.env`)
+
+You can precisely tune the async engine by modifying the `.env` file:
+
+```ini
+# --- Tor Proxy Configuration ---
+# 9050 for Standalone Tor, 9150 for Tor Browser Background
+TOR_PROXY_HOST=127.0.0.1
+TOR_PROXY_PORT=9150
+
+# --- Engine Constraints ---
+# Maximum concurrent asyncio connections
+MAX_CONCURRENCY=20
+
+# Timeouts & Retries
+ONION_TIMEOUT=30
+CLEARNET_TIMEOUT=15
+MAX_RETRIES=3
+RETRY_BACKOFF=1.5
+CIRCUIT_BREAKER_THRESHOLD=2
+```
 
 ---
 
-## ⚠️ Disclaimer
+## 🧪 Testing
 
-LeakRecon is developed exclusively for **educational purposes, authorized security research, and threat intelligence**. 
+LeakRecon incorporates a `pytest` suite designed to validate core mechanics, proxy handling, and configuration integrity without polluting external environments.
 
-The developer assumes no responsibility for any unauthorized, illegal, or malicious use of this tool. This framework interacts with public data and dark web indexes. Always ensure you have explicit permission before investigating any infrastructure, domain, or identity that does not belong to you.
+```bash
+# Ensure dev-dependencies are installed
+pip install pytest pytest-asyncio
 
-**Use responsibly.**
+# Execute the test suite
+pytest tests/
+```
+
+---
+
+## ⚖️ Legal Disclaimer
+
+**LeakRecon is engineered strictly for authorized security auditing, academic research, and lawful threat intelligence operations.**
+
+- 🚫 You **MUST NOT** utilize this tool to attack, scan, or scrape targets for which you do not possess explicit, written, and mutual consent.
+- 🚫 The author (**egnake**) assumes **ZERO LIABILITY** for misuse, data damage, or illegal activities conducted via this software.
+- ⚖️ By downloading, cloning, or executing LeakRecon, you agree to adhere to all applicable local, state, and international cyber laws.
+
+---
+<div align="center">
+  <i>Developed with precision by <b>Egnake</b></i><br>
+  Available under the <a href="LICENSE">MIT License</a>.
+</div>
